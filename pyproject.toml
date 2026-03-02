@@ -1,0 +1,73 @@
+[build-system]
+# Build system specify which backend is used to build/install the project (flit,
+# poetry, setuptools,...). All backends are supported by `pip install`
+requires = ["flit_core >=3.8,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+# Project metadata. Available keys are documented at:
+# https://packaging.python.org/en/latest/specifications/declaring-project-metadata
+name = "earth-ai-remote-sensing-models"
+description = "Earth AI Remote Sensing Models"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+authors = [{name = "Earth AI Remote Sensing Models authors", email="earth-ai-remote-sensing-external@google.com"}]
+classifiers = [  # List of https://pypi.org/classifiers/
+    "License :: OSI Approved :: Apache Software License",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+keywords = []
+
+# pip dependencies of the project
+# Installed locally with `pip install -e .`
+dependencies = [
+    "ml-collections",
+    "numpy",
+    "typing-extensions",
+    "overrides",
+    "scipy",
+    "scikit-learn",
+    "opencv-python",
+]
+
+# `version` is automatically set by flit to use `remote_sensing.__version__`
+dynamic = ["version"]
+
+[project.urls]
+homepage = "https://github.com/google-research/remote_sensing"
+repository = "https://github.com/google-research/remote_sensing"
+changelog = "https://github.com/google-research/remote_sensing/blob/main/CHANGELOG.md"
+# documentation = ""
+
+[project.optional-dependencies]
+# Development deps (unittest, linting, formating,...)
+# Installed through `pip install -e .[dev]`
+dev = [
+    "pytest",
+    "pytest-xdist",
+    "pylint>=2.6.0",
+    "pyink",
+]
+
+[tool.flit.module]
+name = "remote_sensing"
+
+[tool.flit.sdist]
+# Flit specific options (files to exclude from the PyPI package).
+# If using another build backend (setuptools, poetry), you can remove this
+# section.
+exclude = [
+  # Do not release tests files on PyPI
+  "tests/**/*_test.py",
+]
+
+[tool.pyink]
+# Formatting configuration to follow Google style-guide
+line-length = 80
+unstable = true
+pyink-indentation = 2
+pyink-use-majority-quotes = true
