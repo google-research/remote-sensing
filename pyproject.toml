@@ -29,9 +29,9 @@ dependencies = [
     "numpy",
     "typing-extensions",
     "overrides",
-    "scipy",
-    "scikit-learn",
-    "opencv-python",
+    "torch",
+    "torchvision",
+    "transformers",
 ]
 
 # `version` is automatically set by flit to use `remote_sensing.__version__`
