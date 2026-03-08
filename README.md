@@ -12,7 +12,7 @@ information about Earth AI and the different model families.
 ## Research Papers
 
 * A Recipe for Improving Remote Sensing VLM Zero Shot Generalization ([abstract](https://arxiv.org/abs/2503.08722), [pdf](https://arxiv.org/pdf/2503.08722))
-* On-the-Fly OVD Adaptation with FLAME: Few-shot Localization via Active Marginal-Samples Exploration ([abstract](https://arxiv.org/pdf/2510.17670), [pdf](https://arxiv.org/pdf/2510.17670))
+* On-the-Fly OVD Adaptation with FLAME: Few-shot Localization via Active Marginal-Samples Exploration ([abstract](https://openaccess.thecvf.com/content/WACV2026W/GeoCV/html/Refael_On-the-Fly_OVD_Adaptation_with_FLAME_Few-shot_Localization_via_Active_Marginal-Samples_WACVW_2026_paper.html), [pdf](https://openaccess.thecvf.com/content/WACV2026W/GeoCV/papers/Refael_On-the-Fly_OVD_Adaptation_with_FLAME_Few-shot_Localization_via_Active_Marginal-Samples_WACVW_2026_paper.pdf))
 * Zero-Shot Multi-Spectral Learning: Reimagining a Generalist Multimodal Gemini 2.5 Model for Remote Sensing Applications ([abstract](https://arxiv.org/abs/2509.19087), [pdf](https://arxiv.org/pdf/2509.19087), [blog](https://developers.googleblog.com/unlocking-multi-spectral-data-with-gemini/), [colab](https://github.com/google-gemini/cookbook/blob/main/examples/multi_spectral_remote_sensing.ipynb))
 * Enhancing Remote Sensing Representations Through Mixed-Modality Masked Autoencoding ([abstract](https://ieeexplore.ieee.org/document/10972577), [pdf](https://openaccess.thecvf.com/content/WACV2025W/GeoCV/papers/Linial_Enhancing_Remote_Sensing_Representations_Through_Mixed-Modality_Masked_Autoencoding_WACVW_2025_paper.pdf))
 
