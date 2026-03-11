@@ -26,5 +26,6 @@ Deployment instructions will be provided when access is granted.
 
 Additional useful notebooks:
 
+* [Model deployment notebook](remote_sensing/vertex_ai/notebooks/model_garden_remote_sensing_deployment.ipynb)
 * [VLM Batch prediction](remote_sensing/vertex_ai/notebooks/vlm_batch_prediction_example.ipynb)
 
