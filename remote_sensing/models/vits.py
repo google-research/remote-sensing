@@ -29,7 +29,7 @@ from transformers.models.vit import modeling_vit
 
 
 class PretrainedRemoteSensingVit(transformers.ViTPreTrainedModel):
-  """A Pre-trained ViT architecture configuration for Earth AI Remote Sensing models for RGB imagery.
+  """A Pre-trained ViT architecture for Earth AI Remote Sensing RGB imagery.
 
   Adapted from the implementation of modelings_vit.ViTModel with some changes:
     - Using sincos2d positional embeddings instead of trainable positional
