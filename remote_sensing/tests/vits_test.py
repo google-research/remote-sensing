@@ -24,7 +24,6 @@ import transformers
 class TorchModelsTest(absltest.TestCase):
 
   def test_vit_smoke_test(self):
-    torch.manual_seed(42)
     config = transformers.ViTConfig(
         hidden_size=16,
         num_hidden_layers=2,
@@ -35,6 +34,13 @@ class TorchModelsTest(absltest.TestCase):
         num_channels=3,
     )
     model = vits.PretrainedRemoteSensingVit(config)
+    for param in model.parameters():
+      if param.ndim <= 1:
+        torch.nn.init.zeros_(param)
+      elif param.ndim == 2:
+        torch.nn.init.eye_(param)
+      else:
+        torch.nn.init.dirac_(param)
     model.eval()
     with torch.no_grad():
       out = model(torch.ones((11, 3, 35, 35), dtype=torch.float32))
@@ -43,10 +49,8 @@ class TorchModelsTest(absltest.TestCase):
     np.testing.assert_allclose(
         pooled,
         # pyformat: disable
-        np.array([
-            0.46, -0.06, 0.16, -0.06, 0.18, 0.97, 0.59, 0.83,
-            -0.04, -0.37, 0.02, 0.04, 0.20, 1.24, 1.07, 1.18,
-        ]),
+        np.array([1.09, 0.90, 0.99, 0.00, -0.06, 0.98, 1.00, 1.00,
+                  0.09, -0.1, 0.00, 0.00, -0.06, 0.98, 1.00, 1]),
         # pyformat: enable
         rtol=0.0,
         atol=1e-2,
