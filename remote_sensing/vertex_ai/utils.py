@@ -82,7 +82,7 @@ def create_model(
     accelerator: str,
     docker_uri: str = SERVE_DOCKER_URI,
     batch_model: bool = False,
-):
+) -> aiplatform.Model:
   """Creates a Remote Sensing model from Model Garden.
 
   Args:
@@ -133,7 +133,7 @@ def deploy_model(
     min_replica_count: int,
     max_replica_count: int,
     use_dedicated_endpoint: bool = True,
-):
+) -> aiplatform.Endpoint:
   """Deploys a model to an endpoint."""
 
   endpoint = aiplatform.Endpoint.create(
