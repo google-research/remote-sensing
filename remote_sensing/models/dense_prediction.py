@@ -22,6 +22,9 @@ outputs features for each patch. These features are then rearranged to form the
 full dense prediction map.
 """
 
+from collections.abc import Callable
+from typing import Any
+from remote_sensing.models import architectures
 from remote_sensing.models import positional_embeddings
 from remote_sensing.models import vits
 import torch
@@ -69,6 +72,10 @@ class SkipUNetDecoderConfig(DecoderConfig):
 
     self.decoder_dims = decoder_dims
     self.skip_connections = skip_connections
+
+    assert len(decoder_dims) == len(
+        skip_connections
+    ), "Decoder dimensions and skip connections must have the same length."
 
 
 class EncoderDecoderConfig(transformers.PretrainedConfig):
@@ -279,3 +286,135 @@ class ViTEncoderDecoderModel(transformers.PreTrainedModel):
     encoder_features = self.norm(encoder_features)
 
     return self.decoder(encoder_features)
+
+
+class ViTUNetSegmentationModel(transformers.PreTrainedModel):
+  """ViT-based segmentation model with a UNet-style decoder.
+
+  The model extracts intermediate features from selected encoder layers and
+  uses them in a decoder that progressively upsamples the representation to
+  produce a segmentation mask. Intermediate encoder features are captured
+  with forward hooks, which allow the model to access layer outputs during
+  the forward pass without modifying the encoder itself.
+
+  PyTorch forward hooks:
+  https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.register_forward_hook
+
+  For a dense prediction task (e.g., segmentation),
+  config.decoder_config.decoder_dims must be
+  compatible with the encoder ViT's patch size to allow upsampling the
+  representation.
+  Specifically, the ViT encoder patch size must be a power of 2, and for patch
+  size of 2^n the length of config.decoder_config.decoder_dims should be at
+  least (n + 1) to produce output at the same resolution as the input image.
+  If the length of config.decoder_config.decoder_dims is larger than n+1
+  (for patch size 2^n) then the dense outputs will be a super-resolution of
+  the input image.
+
+  For example, for patch size 16 (n=4), if decoder_dims is of length 5, then
+  the output segmentation map will be original resolution, and if decoder_dims
+  is of length 6, then the output segmentation map will be at 2x
+  super-resolution.
+  """
+
+  def __init__(
+      self,
+      config: EncoderDecoderConfig,
+  ):
+    """Initializes the ViTSegmentationModel.
+
+    Args:
+        config: The configuration for the ViT encoder and the UNet-style
+          decoder.
+    """
+    super().__init__(config)
+
+    if not config.encoder_config:
+      raise ValueError("encoder_config must be provided.")
+    if not config.decoder_config:
+      raise ValueError("decoder_config must be provided.")
+
+    self.encoder_config = config.encoder_config
+    self.decoder_config: SkipUNetDecoderConfig = config.decoder_config
+
+    if not config.decoder_config.skip_connections:
+      raise ValueError("skip_connections list must not be empty.")
+
+    self.encoder: transformers.ViTModel = vits.PretrainedRemoteSensingVit(
+        config.encoder_config
+    )
+    self.decoder: architectures.ViTUNetDecoder = architectures.ViTUNetDecoder(
+        encoder_dim=self.decoder_config.encoder_hidden_size,
+        decoder_channels=self.decoder_config.decoder_dims,
+        output_dims=self.decoder_config.output_dims,
+    )
+    self.patch_size: int = self.encoder_config.patch_size
+    self._features: dict[str, torch.Tensor] = {}
+    self.hook_layer_indices: tuple[int, ...] = (
+        self.decoder_config.skip_connections
+    )
+    self.feat_names: list[str] = [f"feat{i}" for i in self.hook_layer_indices]
+    self._hook_handles: list[Any] = []
+
+    def get_activation(name: str) -> Callable[[nn.Module, Any, Any], None]:
+      """Returns a hook function to capture activations."""
+
+      def hook(module: nn.Module, inputs: Any, output: Any) -> None:
+        del module, inputs
+        if isinstance(output, tuple):
+          output = output[0]
+        self._features[name] = output
+
+      return hook
+
+    for i, name in zip(self.hook_layer_indices, self.feat_names):
+      handle = self.encoder.encoder.layer[i].register_forward_hook(
+          get_activation(name)
+      )
+      self._hook_handles.append(handle)
+
+  def forward(self, x: torch.Tensor) -> torch.Tensor:
+    """Forward pass for the segmentation model.
+
+    Args:
+        x: Input image tensor.
+
+    Returns:
+        Output segmentation map from the decoder.
+
+    Raises:
+        RuntimeError: If a feature expected from a hook is not found,
+          indicating an issue with the hook setup or encoder structure.
+    """
+    self._features = {}
+
+    _ = self.encoder(x)
+
+    features = []
+
+    b = x.shape[0]
+    h = x.shape[2] // self.patch_size
+    w = x.shape[3] // self.patch_size
+
+    for name in self.feat_names:
+      if name not in self._features:
+        raise RuntimeError(
+            f"Missing hooked feature '{name}'. Check hook_layer_indices and "
+            "encoder structure."
+        )
+
+      feat = self._features[name]
+
+      if feat.shape[1] == h * w + 1:
+        feat = feat[:, 1:, :]
+
+      if feat.shape[1] != h * w:
+        raise ValueError(
+            f"Feature '{name}' has incompatible token count {feat.shape[1]} "
+            f"for spatial size ({h}, {w})."
+        )
+
+      feat = feat.transpose(1, 2).reshape(b, -1, h, w)
+      features.append(feat)
+
+    return self.decoder(features)

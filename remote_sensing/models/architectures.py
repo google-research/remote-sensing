@@ -17,7 +17,6 @@
 This module currently contains a UNet-style architecture for semantic
 segmentation with ViT encoders.
 """
-from typing import Any, Callable
 
 import torch
 from torch import nn
@@ -93,6 +92,10 @@ class ViTUNetDecoder(nn.Module):
   This decoder takes a list of features from different encoder stages,
   progressively upsamples them, and combines them with skip connections
   to produce a dense prediction map.
+
+  In a combined ViT + ViTUNetDecoder model the ViT patch size should be a
+  power of 2 (i.e., 2^n), and the length of `decoder_channels` should usually
+  be n + 1.
   """
 
   def __init__(
@@ -159,110 +162,3 @@ class ViTUNetDecoder(nn.Module):
 
     x = self.refine(x)
     return self.pred_head(x)
-
-
-class ViTSegmentationModel(nn.Module):
-  """ViT-based segmentation model with a UNet-style decoder.
-
-  The model extracts intermediate features from selected encoder layers and
-  uses them in a decoder that progressively upsamples the representation to
-  produce a segmentation mask. Intermediate encoder features are captured
-  with forward hooks, which allow the model to access layer outputs during
-  the forward pass without modifying the encoder itself.
-
-  PyTorch forward hooks:
-  https://docs.pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.register_forward_hook
-  """
-
-  def __init__(
-      self,
-      encoder: nn.Module,
-      decoder: nn.Module,
-      hook_layer_indices: tuple[int, ...] = (5, 11, 17, 23),
-  ):
-    """Initializes the ViTSegmentationModel.
-
-    Args:
-        encoder: The Vision Transformer encoder.
-        decoder: The UNet-style decoder.
-        hook_layer_indices: Indices of encoder layers from which to extract
-          intermediate features using forward hooks. These features are used
-          as skip connections in the decoder.
-    """
-    super().__init__()
-
-    if not hook_layer_indices:
-      raise ValueError("hook_layer_indices must not be empty.")
-
-    self.encoder: nn.Module = encoder
-    self.decoder: nn.Module = decoder
-    self.patch_size: int = encoder.config.patch_size
-    self._features: dict[str, torch.Tensor] = {}
-    self.hook_layer_indices: tuple[int, ...] = hook_layer_indices
-    self.feat_names: list[str] = [f"feat{i}" for i in self.hook_layer_indices]
-    self._hook_handles: list[Any] = []
-
-    def get_activation(name: str) -> Callable[[nn.Module, Any, Any], None]:
-      """Returns a hook function to capture activations."""
-      def hook(module: nn.Module, inputs: Any, output: Any) -> None:
-        del module, inputs
-        if isinstance(output, tuple):
-          output = output[0]
-        self._features[name] = output
-      return hook
-
-    for i, name in zip(self.hook_layer_indices, self.feat_names):
-      handle = self.encoder.encoder.layer[i].register_forward_hook(
-          get_activation(name)
-      )
-      self._hook_handles.append(handle)
-
-  def forward(self, x: torch.Tensor) -> torch.Tensor:
-    """Forward pass for the segmentation model.
-
-    Args:
-        x: Input image tensor.
-
-    Returns:
-        Output segmentation map from the decoder.
-
-    Raises:
-        RuntimeError: If a feature expected from a hook is not found,
-          indicating an issue with the hook setup or encoder structure.
-    """
-    self._features = {}
-
-    _ = self.encoder(x)
-
-    features = []
-
-    b = x.shape[0]
-    h = x.shape[2] // self.patch_size
-    w = x.shape[3] // self.patch_size
-
-    for name in self.feat_names:
-      if name not in self._features:
-        raise RuntimeError(
-            f"Missing hooked feature '{name}'. Check hook_layer_indices and "
-            "encoder structure."
-        )
-
-      feat = self._features[name]
-
-      if feat.shape[1] == h * w + 1:
-        feat = feat[:, 1:, :]
-
-      if feat.shape[1] != h * w:
-        raise ValueError(
-            f"Feature '{name}' has incompatible token count {feat.shape[1]} "
-            f"for spatial size ({h}, {w})."
-        )
-
-      feat = feat.transpose(1, 2).reshape(b, -1, h, w)
-      features.append(feat)
-
-    return self.decoder(features)
-
-
-
-
