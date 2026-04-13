@@ -20,6 +20,25 @@ import transformers
 from transformers.models.vit import modeling_vit
 
 
+def interpolate_pos_encoding(
+    embeddings: torch.Tensor, from_h: int, from_w: int, to_h: int, to_w: int
+) -> torch.Tensor:
+  """Interpolates positional embeddings to a new image size."""
+  depth = embeddings.shape[-1]
+  pos_emb_2d = embeddings.reshape(1, from_h, from_w, depth)  # [B, H, W, D]
+  pos_emb_2d = pos_emb_2d.permute(0, 3, 1, 2)  # [B, D, H, W]
+  interp_emb = torch.nn.functional.interpolate(
+      pos_emb_2d,
+      size=(to_h, to_w),
+      mode='bilinear',
+      align_corners=False,
+      antialias=True,
+  )
+  interp_emb = interp_emb.permute(0, 2, 3, 1)  # [B, H', W', D]
+  interp_emb = interp_emb.reshape(1, to_h * to_w, depth)
+  return interp_emb
+
+
 class Sincos2dEmbeddings(nn.Module):
   """Computes sin/cos 2d positional embeddings based on PositionalEmbedding2D from the praxis library."""
 
@@ -57,8 +76,13 @@ class Sincos2dEmbeddings(nn.Module):
         or self.config.image_size != height
         or self.config.image_size != width
     ):
-      pos_embeddings = self.interpolate_pos_encoding(
-          pos_embeddings, height // self.patch_size, width // self.patch_size
+      from_size = self.config.image_size // self.patch_size
+      pos_embeddings = interpolate_pos_encoding(
+          pos_embeddings,
+          from_size,
+          from_size,
+          height // self.patch_size,
+          width // self.patch_size,
       )
 
     embeddings += pos_embeddings
@@ -101,26 +125,6 @@ class Sincos2dEmbeddings(nn.Module):
         axis=-1,
     )
     return pos_emb_2d
-
-  def interpolate_pos_encoding(
-      self, embeddings: torch.Tensor, embedding_h: int, embedding_w: int
-  ) -> torch.Tensor:
-    """Interpolates positional embeddings to a new image size."""
-    pretrained_grid_size = self.config.image_size // self.patch_size
-    pos_emb_2d = embeddings.reshape(
-        1, pretrained_grid_size, pretrained_grid_size, self.config.hidden_size
-    )  # [B, H, W, D]
-    pos_emb_2d = pos_emb_2d.permute(0, 3, 1, 2)  # [B, D, H, W]
-    interp_emb = torch.nn.functional.interpolate(
-        pos_emb_2d,
-        size=(embedding_h, embedding_w),
-        mode='bilinear',
-        align_corners=False,
-        antialias=True,
-    )
-    interp_emb = interp_emb.permute(0, 2, 3, 1)  # [B, H', W', D]
-    interp_emb = interp_emb.view(1, -1, self.config.hidden_size)
-    return interp_emb
 
   def compute_sincos2d_embeddings(
       self, h: int, w: int, hidden_dim: int

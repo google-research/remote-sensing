@@ -187,12 +187,12 @@ class ViTDecoder(transformers.PreTrainedModel):
     batch_size, num_patches, num_channels = patches.shape
     patch_size = self.config.patch_size
     output_dims = self.config.output_dims
-    image_size = self.config.image_size
 
     assert num_channels == patch_size * patch_size * output_dims
-    assert num_patches == self.num_patches
 
     patches_per_dim = int(num_patches**0.5)
+    assert patches_per_dim * patches_per_dim == num_patches
+    image_size = patches_per_dim * patch_size
 
     patches = patches.reshape(
         batch_size,
@@ -218,19 +218,38 @@ class ViTDecoder(transformers.PreTrainedModel):
       output_dims).
     """
     _, num_patches, _ = hidden_states.shape
-    if num_patches != self.num_patches:
-      raise ValueError(
-          f"Input hidden_states have {num_patches} patches, but expected"
-          f" {self.num_patches} for image size {self.config.image_size} and"
-          f" patch size {self.config.patch_size}"
-      )
 
     # Embed tokens to decoder hidden size
     # (batch_size, num_patches, decoder_hidden_size)
     features = self.decoder_embed(hidden_states)
 
     # Add positional embeddings
-    features = features + self.decoder_pos_embed
+    if num_patches == self.num_patches and not torch.jit.is_tracing():
+      pos_embed = self.decoder_pos_embed
+    else:
+      # Always interpolate when tracing to ensure the exported model works for
+      # dynamic input shapes.
+      pos_embed = self.decoder_pos_embed
+      from_size = int(self.num_patches**0.5)
+      if from_size * from_size != self.num_patches:
+        raise ValueError(
+            f"Number of patches in config ({self.num_patches}) must be a "
+            "perfect square."
+        )
+      to_size = int(num_patches**0.5)
+      if to_size * to_size != num_patches:
+        raise ValueError(
+            f"Number of patches in input ({num_patches}) must be a perfect "
+            "square."
+        )
+      pos_embed = positional_embeddings.interpolate_pos_encoding(
+          pos_embed,
+          from_h=from_size,
+          from_w=from_size,
+          to_h=to_size,
+          to_w=to_size,
+      )
+    features = features + pos_embed
 
     # Apply Transformer layers
     features = self.decoder_transformer(features).last_hidden_state
