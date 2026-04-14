@@ -28,29 +28,78 @@ class LossesTest(absltest.TestCase):
     self.assertIsInstance(loss.item(), float)
     self.assertGreaterEqual(loss.item(), 0.0)
 
-  def test_dice_loss(self):
-    loss_fn = losses.BinarySegmentationDiceLoss()
-    logits = torch.randn(2, 1, 64, 64)
-    targets = torch.randint(0, 2, (2, 64, 64)).float()
-    loss = loss_fn(logits, targets)
-    self.assertIsInstance(loss.item(), float)
-    self.assertGreaterEqual(loss.item(), 0.0)
-    self.assertLessEqual(loss.item(), 1.0)
+  def test_segmentation_dice_loss(self):
+    # Binary case
+    loss_fn_binary = losses.SegmentationDiceLoss()
+    logits_binary = torch.randn(2, 1, 64, 64)
+    targets_binary = torch.randint(0, 2, (2, 1, 64, 64)).float()
+    loss_binary = loss_fn_binary(logits_binary, targets_binary)
+    self.assertIsInstance(loss_binary.item(), float)
+    self.assertGreaterEqual(loss_binary.item(), 0.0)
+    self.assertLessEqual(loss_binary.item(), 1.0)
+
+    # Multi-class case
+    loss_fn_multiclass = losses.SegmentationDiceLoss()
+    logits_multiclass = torch.randn(2, 3, 64, 64)
+    targets_multiclass = torch.nn.functional.one_hot(
+        torch.randint(0, 3, (2, 64, 64)).long(), num_classes=3
+    ).permute(0, 3, 1, 2).float()
+    loss_multiclass = loss_fn_multiclass(logits_multiclass, targets_multiclass)
+    self.assertIsInstance(loss_multiclass.item(), float)
+    self.assertGreaterEqual(loss_multiclass.item(), 0.0)
+    self.assertLessEqual(loss_multiclass.item(), 1.0)
+
+  def test_segmentation_focal_loss(self):
+    # Binary case
+    loss_fn_binary = losses.SegmentationFocalLoss()
+    logits_binary = torch.randn(2, 1, 64, 64)
+    targets_binary = torch.randint(0, 2, (2, 1, 64, 64)).float()
+    loss_binary = loss_fn_binary(logits_binary, targets_binary)
+    self.assertIsInstance(loss_binary.item(), float)
+    self.assertGreaterEqual(loss_binary.item(), 0.0)
+
+    # Multi-class case
+    loss_fn_multiclass = losses.SegmentationFocalLoss()
+    logits_multiclass = torch.randn(2, 3, 64, 64)
+    targets_multiclass = torch.nn.functional.one_hot(
+        torch.randint(0, 3, (2, 64, 64)).long(), num_classes=3
+    ).permute(0, 3, 1, 2).float()
+    loss_multiclass = loss_fn_multiclass(logits_multiclass, targets_multiclass)
+    self.assertIsInstance(loss_multiclass.item(), float)
+    self.assertGreaterEqual(loss_multiclass.item(), 0.0)
+
+    mask = torch.randint(0, 2, (2, 1, 64, 64)).float()
+    loss_masked = loss_fn_multiclass(
+        logits_multiclass, targets_multiclass, mask
+    )
+    self.assertIsInstance(loss_masked.item(), float)
+    self.assertGreaterEqual(loss_masked.item(), 0.0)
 
   def test_combo_loss(self):
-    dice_loss = losses.BinarySegmentationDiceLoss()
-    loss_fn = losses.CombinedLoss(losses=[dice_loss], weights=[1.0])
+    dice_loss = losses.SegmentationDiceLoss()
+    focal_loss = losses.SegmentationFocalLoss()
+    loss_fn = losses.CombinedLoss(
+        losses=[dice_loss, focal_loss], weights=[0.5, 0.5]
+    )
     logits = torch.randn(2, 1, 64, 64)
-    targets = torch.randint(0, 2, (2, 64, 64)).float()
+    targets = torch.randint(0, 2, (2, 1, 64, 64)).float()
     loss = loss_fn(logits, targets)
     self.assertIsInstance(loss.item(), float)
     self.assertGreaterEqual(loss.item(), 0.0)
 
+    mask = torch.randint(0, 2, (2, 1, 64, 64)).float()
+    loss_masked = loss_fn(logits, targets, mask)
+    self.assertIsInstance(loss_masked.item(), float)
+    self.assertGreaterEqual(loss_masked.item(), 0.0)
+
   def test_loss_backward(self):
-    dice_loss = losses.BinarySegmentationDiceLoss()
-    loss_fn = losses.CombinedLoss(losses=[dice_loss], weights=[1.0])
+    dice_loss = losses.SegmentationDiceLoss()
+    focal_loss = losses.SegmentationFocalLoss()
+    loss_fn = losses.CombinedLoss(
+        losses=[dice_loss, focal_loss], weights=[0.5, 0.5]
+    )
     logits = torch.randn(2, 1, 64, 64, requires_grad=True)
-    targets = torch.randint(0, 2, (2, 64, 64)).float()
+    targets = torch.randint(0, 2, (2, 1, 64, 64)).float()
     loss = loss_fn(logits, targets)
     loss.backward()
     self.assertIsNotNone(logits.grad)
