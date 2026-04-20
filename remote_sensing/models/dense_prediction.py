@@ -23,6 +23,7 @@ full dense prediction map.
 """
 
 from collections.abc import Callable
+import math
 from typing import Any
 from remote_sensing.models import architectures
 from remote_sensing.models import positional_embeddings
@@ -437,3 +438,68 @@ class ViTUNetSegmentationModel(transformers.PreTrainedModel):
       features.append(feat)
 
     return self.decoder(features)
+
+
+class StridedInference(nn.Module):
+  """Adapts a dense prediction model of a fixed image size to any image size.
+
+  Given a model that expects an input image of size (B, C, H, W), and outputs
+  a dense prediction of shape (B, D, H, W), and given an input image of
+  arbitrary size (B, C, H', W') where H' >= H and W' >= W, this class applies
+  the model in strides to the input image and outputs a dense prediction of
+  shape (B, D, H', W'). When two or more tiles overlap, their predictions are
+  averaged to produce the final output.
+
+  Note: ViTDecoder outputs per-pixel-per-class logits. Averaging the logits, and
+  then applying Softmax is not equivalent to applying Softmax to each tile and
+  then averaging the probabilities, but there's no clear best approach.
+
+  Attributes:
+      model: The model to adapt.
+      model_in_height: The expected input height of the model.
+      model_in_width: The expected input width of the model.
+  """
+
+  def __init__(
+      self,
+      model: nn.Module,
+      model_in_height: int,
+      model_in_width: int,
+  ):
+    super().__init__()
+    self.model = model
+    self.model_in_height = model_in_height
+    self.model_in_width = model_in_width
+
+  def forward(self, image: torch.Tensor) -> torch.Tensor:
+    b, _, image_h, image_w = image.shape
+    outputs = None
+    weights = torch.zeros((b, 1, image_h, image_w), device=image.device)
+
+    model_h = self.model_in_height
+    model_w = self.model_in_width
+
+    if image_h < model_h or image_w < model_w:
+      raise ValueError(f"Image size ({image_h}, {image_w}) is smaller than "
+                       f"model input size ({model_h}, {model_w})")
+
+    # Find the number of crops to use on each axis, so that the entire image
+    # is covered with crops of size (model_h, model_w).
+    max_y = image.shape[2] - model_h
+    max_x = image.shape[3] - model_w
+    y_segments = math.ceil(max_y / model_h) + 1
+    x_segments = math.ceil(max_x / model_w) + 1
+
+    # Apply the model in strides, and accumulate the average values.
+    for y in torch.linspace(0, max_y, y_segments, dtype=torch.int64):
+      for x in torch.linspace(0, max_x, x_segments, dtype=torch.int64):
+        crop = image[:, :, y : y + model_h, x : x + model_w]
+        output = self.model(crop)
+        if outputs is None:
+          outputs = torch.zeros(
+              (b, output.shape[1], image_h, image_w), device=image.device
+          )
+        outputs[:, :, y : y + model_h, x : x + model_w] += output
+        weights[:, :, y : y + model_h, x : x + model_w] += 1
+
+    return outputs / weights
