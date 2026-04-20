@@ -181,6 +181,8 @@ class BaseSampler(abc.ABC):
 class BaselineSampler(BaseSampler):
   """Baseline sampling method based on uncertainty and diversity.
 
+  Used in benchmarking the algorithms for the paper, do not use for other
+  purposes.
   Attributes:
     initial_uncertain_pool_factor: The factor by which to multiply the number of
       samples to determine the size of the initial uncertain pool.
@@ -339,7 +341,7 @@ class ClusteredMarginalEmbeddingsBasedSampler(BaseSampler):
       candidate_frac: The fraction of top-scoring images to consider as
         candidates for diversity selection.
       filtering_method: The method to use for filtering marginal candidates.
-      filtering_method_threshold: A threshold  used bythe filtering method.
+      filtering_method_threshold: A threshold used by the filtering method.
       positive_samples_imbalance_ratio: The threshold to decide if to use SMOTE
         or SVMSMOTE, in post processing.
       sigma_gaussian_filter_score_hist_smoothing: The sigma of the gaussian

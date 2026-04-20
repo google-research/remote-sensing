@@ -198,7 +198,11 @@ class ModelResults:
 class PrecisionAtRecallCalculator:
   """Calculates recall, precision and threshold for a given target precision.
 
-  The precision-recall curve is calculated only once.
+  This class manages the precision-recall curve computation and helps in
+  identifying operating points (thresholds) that achieve specific precision
+  targets.
+
+  The precision-recall curve is calculated only once upon initialization.
   """
 
   def __init__(

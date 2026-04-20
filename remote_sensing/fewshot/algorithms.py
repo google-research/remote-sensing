@@ -14,8 +14,15 @@
 
 """API implementation for few-shot retrieval.
 
-This is the entry point for the few-shot retrieval API. It is intended to be
-used by other teams to integrate few-shot retrieval into their workflows.
+This module provides the main entry point for the few-shot retrieval pipeline.
+It orchestrates an active learning workflow where a zero-shot model's initial
+detections are refined using a small number of user-provided annotations.
+
+Key components:
+- `FewShotAlgorithm`: Manages the active learning loop, including example
+  selection and model training.
+- `FewShotClassifier`: A trained model wrapper used for classifying new, unseen
+  embeddings.
 """
 
 from collections.abc import Sequence
@@ -32,8 +39,9 @@ import typing_extensions
 class FewShotClassifier(api.AbstractFewShotClassifier):
   """A trained few-shot classifier for performing inference.
 
-  This model is the output of the FewShotAlgorithm. Its purpose is to take new
-  unseen embeddings and apply binary classification.
+  This class wraps a trained `FewShotModel` (e.g., SVM, Logistic Regression)
+  and provides a standard interface for classifying new embeddings. It is
+  typically created by the `FewShotAlgorithm.train_few_shot_model` method.
   """
 
   def __init__(self, few_shot_model: models_lib.FewShotModel) -> None:
@@ -57,7 +65,7 @@ class FewShotClassifier(api.AbstractFewShotClassifier):
         expected to be of size (num_examples, embedding_dim).
 
     Returns:
-      The predicted integer labels for the embedding.
+      The predicted integer labels for the embeddings.
     """
     return self._model.predict(embeddings)
 
@@ -76,9 +84,11 @@ class FewShotClassifier(api.AbstractFewShotClassifier):
 
 
 class FewShotAlgorithm(api.AbstractFewShotAlgorithm):
-  """Builds a FewShotClassifier through an active learning workflow.
+  """Builds a `FewShotClassifier` through an active learning workflow.
 
-  This class orchestrates the process of training a few-shot model.
+  This class orchestrates the process of training a few-shot model by
+  interactively selecting the most "informative" examples for user labeling.
+
   The typical workflow is:
   1. Initialize with a configuration.
   2. Use `get_indices_for_classification` to select informative examples for
