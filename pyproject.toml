@@ -27,11 +27,14 @@ keywords = []
 dependencies = [
     "ml-collections",
     "numpy",
-    "typing-extensions",
+    "opencv-python",
     "overrides",
+    "scikit-learn",
+    "scipy",
     "torch",
     "torchvision",
     "transformers",
+    "typing-extensions",
 ]
 
 # `version` is automatically set by flit to use `remote_sensing.__version__`
