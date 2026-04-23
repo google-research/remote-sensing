@@ -20,8 +20,8 @@ import ml_collections
 import numpy as np
 import pytest
 from remote_sensing.fewshot import algorithms
+from remote_sensing.fewshot import fewshot_api as api
 from remote_sensing.fewshot import fewshot_models as models_lib
-from remote_sensing.fewshot import fewshot_ovd_api as api
 from remote_sensing.fewshot import sampling
 
 

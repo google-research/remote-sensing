@@ -30,8 +30,8 @@ import logging
 
 import ml_collections
 import numpy as np
+from remote_sensing.fewshot import fewshot_api as api
 from remote_sensing.fewshot import fewshot_models as models_lib
-from remote_sensing.fewshot import fewshot_ovd_api as api
 from remote_sensing.fewshot import sampling
 import typing_extensions
 
