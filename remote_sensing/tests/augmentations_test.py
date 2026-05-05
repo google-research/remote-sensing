@@ -58,19 +58,20 @@ class AugmentationsTest(parameterized.TestCase):
     np.testing.assert_allclose(output["label"].numpy(), x[..., 3:-1, :, :])
     np.testing.assert_allclose(output["weight"].numpy(), x[..., -1:, :, :])
 
-  def test_segmentation_cutmix_and_mixup(self):
+  @parameterized.parameters((0.5, 0.5), (0.5, 0.0), (0.0, 0.5))
+  def test_segmentation_cutmix_and_mixup(self, cutmix_alpha, mixup_alpha):
+    torch.manual_seed(42)
     image_label1 = torch.ones(size=(1, 2, 10, 10))
     image_label2 = torch.zeros(size=(1, 2, 10, 10))
     x = torch.cat([image_label1, image_label2], dim=0)
     output = augmentations.SegmentationCutMixAndMixUp(
-        cutmix_alpha=0.7, mixup_alpha=0.5
+        cutmix_alpha=cutmix_alpha, mixup_alpha=mixup_alpha
     )(x)
     self.assertEqual(output.shape, (2, 2, 10, 10))
     np.testing.assert_array_less(output.numpy(), 1.01)
     np.testing.assert_array_less(-output.numpy(), 0.01)
     np.testing.assert_allclose(torch.sum(output, dim=0).numpy(), 1)
-    self.assertGreater(torch.sum(output[0, ...]).numpy(), 0)
-    self.assertLess(torch.sum(output[0, ...]).numpy(), 200)
+    self.assertTrue(torch.any(output != x).numpy())
 
   def test_apply_on_field(self):
     x = {
@@ -81,8 +82,10 @@ class AugmentationsTest(parameterized.TestCase):
         field="image",
         transform=lambda y: y + 1,
     )(x)
-    self.assertEqual(output["image"].numpy(), np.ones((1,)))
-    self.assertEqual(output["label"].numpy(), np.full((1,), fill_value=42))
+    np.testing.assert_equal(x["image"].numpy(), 0)
+    np.testing.assert_equal(x["label"].numpy(), 42)
+    np.testing.assert_equal(output["image"].numpy(), 1)
+    np.testing.assert_equal(output["label"].numpy(), 42)
 
   def test_validation_check_passes(self):
     x = {
@@ -91,7 +94,7 @@ class AugmentationsTest(parameterized.TestCase):
     }
     x = augmentations.PrepareSegmentationLabelAndWeight(17)(x)
     output = augmentations.ValidationCheck(num_channels=3, num_classes=17)(x)
-    self.assertEqual(output, x)
+    self.assertIs(output, x)
 
   def test_validation_check_fails(self):
     validation_check = augmentations.ValidationCheck(

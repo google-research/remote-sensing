@@ -264,8 +264,9 @@ class ApplyOnField(nn.Module):
     self.transform = transform
 
   def forward(self, d: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    d[self.field] = self.transform(d[self.field])
-    return d
+    res = {k: v for k, v in d.items() if k != self.field}
+    res[self.field] = self.transform(d[self.field])
+    return res
 
 
 class ValidationCheck(nn.Module):
