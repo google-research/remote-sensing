@@ -1,38 +1,10 @@
-# Earth AI Remote Sensing Models
-
-*This is not an officially supported Google product.*
-
-## Installation
-
-You can install the package from PyPI:
-
-```bash
-pip install remote-sensing
-```
-
-Alternatively, for development, you can install it in editable mode with
-development dependencies:
-
-```bash
-pip install -e .[dev]
-```
-
-## Running tests
-
-To run the tests, first install the package in development mode as described
-above, then run `pytest`:
-
-```bash
-pytest
-```
+# Few-shot Learning
 
 This is not an officially supported Google product. This project is not
 eligible for the [Google Open Source Software Vulnerability Rewards
 Program](https://bughunters.google.com/open-source-security).
 
-## Few-shot Learning
-
-### Introduction & Motivation
+## Introduction & Motivation
 
 Open-vocabulary object detection (OVD) models offer flexibility but suffer from
 semantic ambiguity, especially in specialized domains like Remote Sensing (RS).
@@ -55,7 +27,7 @@ allowing you to train a classifier with very few labeled examples. It uses an
 active learning approach to interactively select the most informative examples
 for labeling, and then trains a model based on these labels.
 
-### Active Learning Workflow
+## Active Learning Workflow
 
 The few-shot learning process is orchestrated by the `FewShotAlgorithm` class,
 which follows these steps:
@@ -74,7 +46,7 @@ which follows these steps:
 This loop can be repeated multiple times to iteratively improve the model's
 performance.
 
-### Sampling Strategies
+## Sampling Strategies
 
 The core of the active learning loop is the sampling strategy, which determines
 which examples to select for annotation. The `remote_sensing.fewshot` package
@@ -93,7 +65,7 @@ provides several sampling strategies:
     (marginal candidates), and K-Means clustering to select a diverse subset of
     these candidates.
 
-### Experimental Results
+## Experimental Results
 
 We evaluated on **DOTA** (Aerial) and **DIOR** (Optical RS) datasets using a
 30-shot protocol.
@@ -125,10 +97,108 @@ SIoU [4]                          | 45.88%     | 52.85%
     satellite imagery. 2024.
 4.  **Jeune et al.** SIoU Loss for Few-Shot Object Detection. 2023.
 
-### Example Usage
+## Example Usage
 
-For an example of how to use the `remote_sensing.fewshot` package, see the
-[fewshot_demo_on_dior.ipynb](notebooks/fewshot_demo_on_dior.ipynb) notebook.
+Here's a basic example of how to use the `FewShotAlgorithm` to train a
+specialized classifier.
+
+This example is agnostic to the task type (image-level embedding or object-level
+embeddings) and does not show how to compute the zero-shot embeddings for images
+or object bounding boxes within an image.
+
+It assumes a large set of unlabeled examples (e.g., tens of thousands examples)
+from which a small set of examples (e.g., tens) is chosen for user annotation.
+
+Step 1: Installing the Earth AI Remote Sensing package:
+
+```python
+!pip install git+https://github.com/google-research/remote-sensing.git
+```
+
+Initial imports:
+
+```python
+import ml_collections
+import numpy as np
+
+from remote_sensing.fewshot import fewshot_api as api
+from remote_sensing.fewshot import algorithms
+from remote_sensing.fewshot import utils
+```
+
+Step 2: Model Configuration (you should tune the parameters)
+
+```python
+few_shot_config = ml_collections.ConfigDict()
+few_shot_config.sampler = ml_collections.ConfigDict(
+    dict(
+        name="PCAKDEClusteringSampler",
+        params=dict(
+            candidate_frac=0.495,
+            pca_components=16,
+            max_num_samples_to_process=1000,
+            density_ratio_from_peak=0.65,
+            kde_bandwidth=0.495,
+            density_threshold_percentile=70,
+        ),
+    )
+)
+
+# Few-shot model config
+few_shot_config.few_shot_model = ml_collections.ConfigDict(
+    dict(
+        name="SVMModel",
+        params=dict(
+            kernel="rbf",
+            C=11,
+            gamma="scale",
+        ),
+    )
+)
+
+algorithm = algorithms.FewShotAlgorithm(few_shot_config)
+```
+
+Step 3: Get Indices for Annotation (Active Learning).
+
+Assume `unlabeled_examples` is a list of `api.ZeroShotExample` objects:
+
+```python
+
+# Add code that calls the OWL-ViT model or reads precomputed embeddings
+# from GCS/BigQuery.
+unlabeled_examples = ...
+
+number_of_samples = 60
+
+indices = algorithm.get_indices_for_annotation(
+    zero_shot_examples=unlabeled_examples, # Your unlabeled examples go here.
+    number_of_samples=number_of_samples)
+```
+
+Step 4: User provides binary `0` or `1` labels (in a real scenario, this would
+involve a UI or manual labeling process):
+
+```python
+for idx in indices:
+    unlabeled_examples[idx].label = 1  # or 0 based on user input
+
+labeled_examples = [unlabeled_examples[idx] for idx in indices]
+```
+
+Step 5: Train the Few-shot Model:
+
+```python
+classifier = algorithm.train_few_shot_model(labeled_examples)
+```
+
+Step 6: Perform inference on new embeddings:
+
+```python
+new_embeddings = ... # Embeddings of the unclassified examples.
+predictions = classifier.classify(new_embeddings)
+confidences = classifier.score_confidence(new_embeddings)
+```
 
 ## Citation
 
