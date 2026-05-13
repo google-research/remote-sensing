@@ -104,6 +104,29 @@ class LossesTest(absltest.TestCase):
     loss.backward()
     self.assertIsNotNone(logits.grad)
 
+  def test_segmentation_lovasz_softmax_loss(self):
+    loss_fn = losses.SegmentationLovaszSoftmaxLoss()
+    logits = torch.randn(2, 3, 10, 10)
+    targets_indices = torch.randint(0, 3, (2, 10, 10)).long()
+    targets = torch.nn.functional.one_hot(
+        targets_indices, num_classes=3
+    ).permute(0, 3, 1, 2).float()
+    loss = loss_fn(logits, targets)
+    self.assertIsInstance(loss.item(), float)
+    self.assertGreaterEqual(loss.item(), -1.0)
+    self.assertLessEqual(loss.item(), 2.0)
+
+    mask = torch.randint(0, 2, (2, 1, 10, 10)).float()
+    loss_masked = loss_fn(logits, targets, mask)
+    self.assertIsInstance(loss_masked.item(), float)
+    self.assertGreaterEqual(loss_masked.item(), -1.0)
+    self.assertLessEqual(loss_masked.item(), 2.0)
+
+    # Test with perfect prediction
+    logits_perfect = targets * 100.0 - (1 - targets) * 100.0
+    loss_perfect = loss_fn(logits_perfect, targets)
+    self.assertAlmostEqual(loss_perfect.item(), 0.0, places=3)
+
 
 if __name__ == '__main__':
   absltest.main()

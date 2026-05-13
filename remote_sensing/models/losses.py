@@ -29,6 +29,7 @@ class SegmentationDiceLoss(nn.Module):
   Dice loss optimizes for region overlap between the predicted segmentation
   mask and the ground truth mask by summing over the spatial dimensions.
   It is effective when overlap-based performance is important.
+
   """
 
   def __init__(self, epsilon: float = 1e-6, per_image_loss: bool = False):
@@ -98,6 +99,7 @@ class SegmentationDiceLoss(nn.Module):
         raise ValueError(
             f'Mask must have shape (B, 1, H, W), got {mask.shape}.'
         )
+
       mask = mask.float()
       intersection = (probs * targets * mask).sum(dim=dims)
       p_sum = (probs * mask).sum(dim=dims)
@@ -113,6 +115,8 @@ class SegmentationFocalLoss(nn.Module):
   """Focal loss for segmentation.
 
   Supports binary and multi-class segmentation.
+
+  Paper: https://arxiv.org/abs/1708.02002
   """
 
   def __init__(
@@ -160,8 +164,8 @@ class SegmentationFocalLoss(nn.Module):
           f'Logits shape {logits.shape} and targets shape {targets.shape} must'
           ' be identical.'
       )
-    num_classes = logits.shape[1]
 
+    num_classes = logits.shape[1]
     targets_onehot = targets.float()
 
     focal_loss = ops.sigmoid_focal_loss(
@@ -185,6 +189,175 @@ class SegmentationFocalLoss(nn.Module):
       focal_loss = focal_loss.mean()
 
     return focal_loss
+
+
+def _lovasz_grad(gt_sorted: torch.Tensor) -> torch.Tensor:
+  """Computes gradient of Lovasz extension with respect to logits.
+
+  Args:
+    gt_sorted: A 1D tensor of ground truth labels (0.0 or 1.0) for a single
+      class, sorted in descending order by the magnitude of errors (|gt -
+      pred|). Expected shape is (N,).
+
+  Returns:
+    The gradient of the Lovasz extension.
+  """
+  num_elements = gt_sorted.numel()
+  gt_sum = gt_sorted.sum()
+  intersection = gt_sum - gt_sorted.float().cumsum(0)
+  union = gt_sum + (1.0 - gt_sorted).float().cumsum(0)
+  jaccard = 1.0 - intersection / union.clamp_min(1e-6)
+
+  if num_elements > 1:
+    jaccard[1:num_elements] = jaccard[1:num_elements] - jaccard[0:-1]
+  return jaccard
+
+
+def _flatten_probs(
+    probs: torch.Tensor,
+    labels: torch.Tensor,
+    mask: Optional[torch.Tensor] = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+  """Flattens predictions in the batch dimension and filters by mask.
+
+  Args:
+    probs: Probability tensor of shape (B, C, H, W).
+    labels: Class label tensor of shape (B, H, W).
+    mask: Optional mask tensor of shape (B, 1, H, W) or (B, H, W). If provided,
+      only elements where mask > 0 are kept.
+
+  Returns:
+    A tuple of flattened tensors (probs, labels), where probs has shape
+    (N, C) and labels has shape (N,), and N is the number of valid elements.
+  """
+  if probs.dim() != 4:
+    raise ValueError(f'Probs must have shape (B, C, H, W), got {probs.shape}.')
+  if labels.dim() != 3:
+    raise ValueError(f'Labels must have shape (B, H, W), got {labels.shape}.')
+
+  _, num_classes, _, _ = probs.shape
+  probs = probs.permute(0, 2, 3, 1).reshape(-1, num_classes)  # (B*H*W, C)
+  labels = labels.reshape(-1)  # (B*H*W)
+
+  if mask is None:
+    return probs, labels
+  if mask.dim() == 4:
+    if mask.shape[1] != 1:
+      raise ValueError(
+          f'Mask must have shape (B, 1, H, W) or (B, H, W), got {mask.shape}.'
+      )
+  elif mask.dim() != 3:
+    raise ValueError(
+        f'Mask must have shape (B, 1, H, W) or (B, H, W), got {mask.shape}.'
+    )
+
+  mask = mask.float().reshape(-1)
+  valid = mask > 0
+  probs = probs[valid]
+  labels = labels[valid]
+  return probs, labels
+
+
+def _lovasz_softmax_flat(
+    probs: torch.Tensor, labels: torch.Tensor, classes: str = 'present'
+) -> torch.Tensor:
+  """Computes Lovasz-Softmax loss from flattened probabilities and labels.
+
+  Args:
+    probs: Flattened probability tensor of shape (N, C), where N is the number
+      of elements and C is the number of classes.
+    labels: Flattened class label tensor of shape (N,).
+    classes: 'present' or 'all'. If 'present', only classes present in labels
+      are considered for loss computation. If 'all', all classes are considered.
+
+  Returns:
+    The Lovasz-Softmax loss.
+  """
+  if probs.numel() == 0:
+    return probs.sum() * 0.0
+
+  num_classes = probs.shape[1]
+  losses = []
+  for class_index in range(num_classes):
+    class_targets = torch.as_tensor(labels == class_index, dtype=torch.float32)
+    if classes == 'present' and class_targets.sum() == 0:
+      continue
+
+    class_pred = probs[:, class_index]
+    errors = (class_targets - class_pred).abs()
+    errors_sorted, perm = torch.sort(errors, 0, descending=True)
+    perm = perm.data
+    class_targets_sorted = class_targets[perm]
+    losses.append(torch.dot(errors_sorted, _lovasz_grad(class_targets_sorted)))
+
+  if not losses:
+    return probs.sum() * 0.0
+  return torch.stack(losses).mean()
+
+
+class SegmentationLovaszSoftmaxLoss(nn.Module):
+  """Lovasz-Softmax loss for segmentation.
+
+  Supports multi-class segmentation.
+  It is a loss function for semantic segmentation that directly optimizes
+  the Jaccard index (IoU) for multi-class problems.
+  It is particularly effective for tasks with imbalanced classes.
+
+  Paper: https://arxiv.org/abs/1705.08790
+  """
+
+  def __init__(self, classes: str = 'present'):
+    """Initializes the Lovasz-Softmax loss.
+
+    Args:
+      classes: 'present' or 'all'. If 'present', only classes present in the
+        ground truth are considered for loss computation. If 'all', all classes
+        are considered.
+    """
+    super().__init__()
+    if classes not in ['present', 'all']:
+      raise ValueError(f"classes must be 'present' or 'all', got {classes}.")
+    self.classes = classes
+
+  def forward(
+      self,
+      logits: torch.Tensor,
+      targets: torch.Tensor,
+      mask: Optional[torch.Tensor] = None,
+  ) -> torch.Tensor:
+    """Computes the Lovasz-Softmax loss.
+
+    Args:
+      logits: The raw logits from the model. Expected shape is (B, C, H, W).
+      targets: The ground truth segmentation masks, one-hot encoded. Expected
+        shape is (B, C, H, W).
+      mask: An optional mask tensor. Expected shape is (B, 1, H, W).
+
+    Returns:
+      The Lovasz-Softmax loss over the batch.
+    """
+    if logits.dim() != 4:
+      raise ValueError(
+          f'Logits must have shape (B, C, H, W), got {logits.shape}.'
+      )
+    if targets.dim() != 4:
+      raise ValueError(
+          f'Targets must have shape (B, C, H, W), got {targets.shape}.'
+      )
+    if logits.shape != targets.shape:
+      raise ValueError(
+          f'Logits shape {logits.shape} and targets shape {targets.shape} must'
+          ' be identical.'
+      )
+    if logits.shape[1] == 1:
+      raise ValueError('Lovasz-Softmax loss requires C>1.')
+
+    labels = targets.argmax(dim=1).long()
+    probs = torch.softmax(logits, dim=1)
+    probs_flat, labels_flat = _flatten_probs(probs, labels, mask)
+    return _lovasz_softmax_flat(
+        probs_flat, labels_flat, classes=self.classes
+    )
 
 
 class CombinedLoss(nn.Module):
@@ -232,6 +405,7 @@ class CombinedLoss(nn.Module):
       The combined loss over the batch.
     """
     total_loss = torch.tensor(0.0, device=logits.device)
+
     for weight, loss_fn in zip(self.weights, self.losses):
       total_loss += weight * loss_fn(logits, targets, mask)
     return total_loss
