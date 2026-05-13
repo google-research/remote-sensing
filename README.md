@@ -24,6 +24,10 @@ information about Earth AI and the different model families.
   for semantic change understanding in remote sensing, pairing multi-temporal
   image evidence with natural language questions and answers.
 
+## 💻 Code repository
+
+[Implementation of the Few-shot algorithm](fewshot/) from the [On-the-Fly OVD Adaptation with FLAME: Few-shot Localization via Active Marginal-Samples Exploration](https://openaccess.thecvf.com/content/WACV2026W/GeoCV/papers/Refael_On-the-Fly_OVD_Adaptation_with_FLAME_Few-shot_Localization_via_Active_Marginal-Samples_WACVW_2026_paper.pdf) paper.
+
 ## Remote Sensing Models on Vertex AI Model Garden
 
 [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/model-garden/google/earth-ai/)
