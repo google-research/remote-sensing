@@ -26,7 +26,7 @@ information about Earth AI and the different model families.
 
 ## 💻 Code repository
 
-[Implementation of the Few-shot algorithm](fewshot/) from the [On-the-Fly OVD Adaptation with FLAME: Few-shot Localization via Active Marginal-Samples Exploration](https://openaccess.thecvf.com/content/WACV2026W/GeoCV/papers/Refael_On-the-Fly_OVD_Adaptation_with_FLAME_Few-shot_Localization_via_Active_Marginal-Samples_WACVW_2026_paper.pdf) paper.
+[Implementation of the Few-shot algorithm](remote_sensing/fewshot/) from the [On-the-Fly OVD Adaptation with FLAME: Few-shot Localization via Active Marginal-Samples Exploration](https://openaccess.thecvf.com/content/WACV2026W/GeoCV/papers/Refael_On-the-Fly_OVD_Adaptation_with_FLAME_Few-shot_Localization_via_Active_Marginal-Samples_WACVW_2026_paper.pdf) paper.
 
 ## Remote Sensing Models on Vertex AI Model Garden
 
