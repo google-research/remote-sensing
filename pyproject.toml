@@ -33,7 +33,7 @@ dependencies = [
     "scipy",
     "torch",
     "torchvision",
-    "transformers",
+    "transformers~=5.5.0",
     "typing-extensions",
 ]
 
