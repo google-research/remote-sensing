@@ -95,14 +95,6 @@ class PretrainedRemoteSensingVit(transformers.ViTPreTrainedModel):
         self.pooler(sequence_output) if self.pooler is not None else None
     )
 
-    if not self.config.use_return_dict:
-      head_outputs = (
-          (sequence_output, pooled_output)
-          if pooled_output is not None
-          else (sequence_output,)
-      )
-      return head_outputs + encoder_outputs[1:]
-
     return modeling_outputs.BaseModelOutputWithPooling(
         last_hidden_state=sequence_output,
         pooler_output=pooled_output,
