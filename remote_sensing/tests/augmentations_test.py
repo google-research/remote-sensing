@@ -87,6 +87,10 @@ class AugmentationsTest(parameterized.TestCase):
     np.testing.assert_equal(output["image"].numpy(), 1)
     np.testing.assert_equal(output["label"].numpy(), 42)
 
+  def test_apply_on_list(self):
+    output = augmentations.ApplyOnList(lambda y: torch.rand(size=()))([0, 1])
+    self.assertFalse(torch.equal(output[0], output[1]))
+
   def test_validation_check_passes(self):
     x = {
         "image": torch.rand(size=(1, 3, 10, 10)) * 6 - 3,

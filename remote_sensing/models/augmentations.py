@@ -89,6 +89,7 @@ loss function, and that the loss function is compatible with soft-labels.
 The `losses.py` library is designed to work with these augmentations.
 """
 
+from typing import Any
 import torch
 from torch import nn
 import torchvision
@@ -267,6 +268,17 @@ class ApplyOnField(nn.Module):
     res = {k: v for k, v in d.items() if k != self.field}
     res[self.field] = self.transform(d[self.field])
     return res
+
+
+class ApplyOnList(nn.Module):
+  """A convenience module for applying a transformation on list of samples."""
+
+  def __init__(self, transform: nn.Module):
+    super().__init__()
+    self.transform = transform
+
+  def forward(self, lst: list[Any]) -> list[Any]:
+    return [self.transform(i) for i in lst]
 
 
 class ValidationCheck(nn.Module):
