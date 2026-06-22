@@ -50,11 +50,13 @@ def auto_label_palette(num_classes: int) -> torch.Tensor:
     The palette should have a good contrast between each two colors.
   """
   # All shades or R/G/B.
-  v = torch.linspace(0, 1.0, math.ceil(num_classes ** (1 / 3.0)))
+  # Add 2 to include black and white which are later removed.
+  v = torch.linspace(0, 1.0, math.ceil((num_classes + 2) ** (1 / 3.0)))
   # All combinations of R/G/B, with at least num_classes combinations.
   # Notice that ceil(c ** 1/3.)**3 >= c.
   color_set = torch.stack(torch.meshgrid(v, v, v, indexing='ij'), dim=3)
-  color_set = color_set.reshape(-1, 3)
+  # Remove black and white, which are the first and last colors.
+  color_set = color_set.reshape(-1, 3)[1:-1]
   # Stores the minimum distance from each color to the set of chosen colors.
   distances = torch.full((len(color_set),), torch.inf)
   label_palette = []
