@@ -190,7 +190,9 @@ class DensePredictionTest(parameterized.TestCase):
         encoder_config=encoder_config,
         decoder_config=decoder_config,
     )
-    model = dense_prediction.ViTUNetSegmentationModel(composite_config)
+    model = dense_prediction.ViTUNetSegmentationModel.init_from_config(
+        config=composite_config
+    )
     model.eval()
     with torch.no_grad():
       x = torch.randn((2, 4, image_size, image_size), dtype=torch.float32)

@@ -337,44 +337,87 @@ class ViTUNetSegmentationModel(transformers.PreTrainedModel):
   super-resolution.
   """
 
-  def __init__(
-      self,
-      config: EncoderDecoderConfig,
-  ):
-    """Initializes the ViTSegmentationModel.
-
-    Args:
-        config: The configuration for the ViT encoder and the UNet-style
-          decoder.
-    """
-    super().__init__(config)
+  @classmethod
+  def init_from_config(cls, config: EncoderDecoderConfig):
+    encoder = vits.PretrainedRemoteSensingVit(config.encoder_config)
 
     if not config.encoder_config:
       raise ValueError("encoder_config must be provided.")
     if not config.decoder_config:
       raise ValueError("decoder_config must be provided.")
-
-    self.encoder_config = config.encoder_config
-    self.decoder_config: SkipUNetDecoderConfig = config.decoder_config
-
     if not config.decoder_config.skip_connections:
       raise ValueError("skip_connections list must not be empty.")
 
-    self.encoder: transformers.ViTModel = vits.PretrainedRemoteSensingVit(
-        config.encoder_config
+    decoder = architectures.ViTUNetDecoder(
+        encoder_dim=config.decoder_config.encoder_hidden_size,
+        decoder_channels=config.decoder_config.decoder_dims,
+        output_dims=config.decoder_config.output_dims,
     )
-    self.decoder: architectures.ViTUNetDecoder = architectures.ViTUNetDecoder(
-        encoder_dim=self.decoder_config.encoder_hidden_size,
-        decoder_channels=self.decoder_config.decoder_dims,
-        output_dims=self.decoder_config.output_dims,
+    return cls(config, encoder, decoder)
+
+  @classmethod
+  def init_from_pretrained_encoder(
+      cls,
+      encoder: vits.PretrainedRemoteSensingVit,
+      decoder_config: SkipUNetDecoderConfig,
+  ):
+    """Initializes the ViTUNetSegmentationModel from a pretrained encoder.
+
+    IMPORTANT: After calling this method, the encoder must not be used
+    directly. For safety, you should delete the encoder after calling this
+    method to avoid accidental direct use: `del encoder`.
+
+    Args:
+      encoder: The pretrained ViT encoder to use.
+      decoder_config: The configuration for the UNet-style decoder.
+
+    Returns:
+      A ViTUNetSegmentationModel instance with a pretrained encoder and a
+      trainable decoder.
+    """
+
+    encoder_config = encoder.config
+    decoder = architectures.ViTUNetDecoder(
+        encoder_dim=decoder_config.encoder_hidden_size,
+        decoder_channels=decoder_config.decoder_dims,
+        output_dims=decoder_config.output_dims,
     )
+    config = EncoderDecoderConfig(encoder_config, decoder_config)
+    return cls(config, encoder, decoder)
+
+  def __init__(
+      self,
+      config: EncoderDecoderConfig,
+      encoder: vits.PretrainedRemoteSensingVit,
+      decoder: architectures.ViTUNetDecoder,
+  ):
+    """Initializes the ViTSegmentationModel.
+
+    Args:
+      config: The configuration for the ViT encoder and the UNet-style decoder.
+      encoder: The ViT encoder to use. If None, an encoder will be initialized
+        based on the encoder config.
+      decoder: The decoder object to use.
+    """
+    super().__init__(config)
+
+    if not isinstance(config.decoder_config, SkipUNetDecoderConfig):
+      raise ValueError(
+          "decoder_config must be a SkipUNetDecoderConfig for "
+          "ViTUNetSegmentationModel."
+      )
+
+    self.encoder_config: transformers.ViTConfig = config.encoder_config
+    self.decoder_config: SkipUNetDecoderConfig = config.decoder_config
+
+    self.encoder: transformers.ViTModel = encoder
+    self.decoder: architectures.ViTUNetDecoder = decoder
     self.patch_size: int = self.encoder_config.patch_size
     self._features: dict[str, torch.Tensor] = {}
     self.hook_layer_indices: tuple[int, ...] = (
         self.decoder_config.skip_connections
     )
     self.feat_names: list[str] = [f"feat{i}" for i in self.hook_layer_indices]
-    self._hook_handles: list[Any] = []
 
     def get_activation(name: str) -> Callable[[nn.Module, Any, Any], None]:
       """Returns a hook function to capture activations."""
@@ -388,10 +431,7 @@ class ViTUNetSegmentationModel(transformers.PreTrainedModel):
       return hook
 
     for i, name in zip(self.hook_layer_indices, self.feat_names):
-      handle = self.encoder.encoder.layer[i].register_forward_hook(
-          get_activation(name)
-      )
-      self._hook_handles.append(handle)
+      self.encoder.encoder.layer[i].register_forward_hook(get_activation(name))
 
   def forward(self, x: torch.Tensor) -> torch.Tensor:
     """Forward pass for the segmentation model.
@@ -436,6 +476,7 @@ class ViTUNetSegmentationModel(transformers.PreTrainedModel):
 
       feat = feat.transpose(1, 2).reshape(b, -1, h, w)
       features.append(feat)
+    self._features = {}
 
     return self.decoder(features)
 
