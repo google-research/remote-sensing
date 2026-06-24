@@ -49,6 +49,31 @@ class LossesTest(absltest.TestCase):
     self.assertGreaterEqual(loss_multiclass.item(), 0.0)
     self.assertLessEqual(loss_multiclass.item(), 1.0)
 
+  def test_segmentation_jaccard_loss(self):
+    # Binary case
+    loss_fn_binary = losses.SegmentationJaccardLoss()
+    logits_binary = torch.randn(2, 1, 64, 64)
+    targets_binary = torch.randint(0, 2, (2, 1, 64, 64)).float()
+    loss_binary = loss_fn_binary(logits_binary, targets_binary)
+    self.assertIsInstance(loss_binary.item(), float)
+    self.assertGreaterEqual(loss_binary.item(), 0.0)
+    self.assertLessEqual(loss_binary.item(), 1.0)
+
+    # Multi-class case
+    loss_fn_multiclass = losses.SegmentationJaccardLoss()
+    logits_multiclass = torch.randn(2, 3, 64, 64)
+    targets_multiclass = (
+        torch.nn.functional.one_hot(
+            torch.randint(0, 3, (2, 64, 64)).long(), num_classes=3
+        )
+        .permute(0, 3, 1, 2)
+        .float()
+    )
+    loss_multiclass = loss_fn_multiclass(logits_multiclass, targets_multiclass)
+    self.assertIsInstance(loss_multiclass.item(), float)
+    self.assertGreaterEqual(loss_multiclass.item(), 0.0)
+    self.assertLessEqual(loss_multiclass.item(), 1.0)
+
   def test_segmentation_focal_loss(self):
     # Binary case
     loss_fn_binary = losses.SegmentationFocalLoss()
@@ -68,12 +93,12 @@ class LossesTest(absltest.TestCase):
     self.assertIsInstance(loss_multiclass.item(), float)
     self.assertGreaterEqual(loss_multiclass.item(), 0.0)
 
-    mask = torch.randint(0, 2, (2, 1, 64, 64)).float()
-    loss_masked = loss_fn_multiclass(
-        logits_multiclass, targets_multiclass, mask
+    weight = torch.randint(0, 2, (2, 1, 64, 64)).float()
+    loss_weighted = loss_fn_multiclass(
+        logits_multiclass, targets_multiclass, weight
     )
-    self.assertIsInstance(loss_masked.item(), float)
-    self.assertGreaterEqual(loss_masked.item(), 0.0)
+    self.assertIsInstance(loss_weighted.item(), float)
+    self.assertGreaterEqual(loss_weighted.item(), 0.0)
 
   def test_combo_loss(self):
     dice_loss = losses.SegmentationDiceLoss()
@@ -87,10 +112,10 @@ class LossesTest(absltest.TestCase):
     self.assertIsInstance(loss.item(), float)
     self.assertGreaterEqual(loss.item(), 0.0)
 
-    mask = torch.randint(0, 2, (2, 1, 64, 64)).float()
-    loss_masked = loss_fn(logits, targets, mask)
-    self.assertIsInstance(loss_masked.item(), float)
-    self.assertGreaterEqual(loss_masked.item(), 0.0)
+    weight = torch.randint(0, 2, (2, 1, 64, 64)).float()
+    loss_weighted = loss_fn(logits, targets, weight)
+    self.assertIsInstance(loss_weighted.item(), float)
+    self.assertGreaterEqual(loss_weighted.item(), 0.0)
 
   def test_loss_backward(self):
     dice_loss = losses.SegmentationDiceLoss()
@@ -116,16 +141,30 @@ class LossesTest(absltest.TestCase):
     self.assertGreaterEqual(loss.item(), -1.0)
     self.assertLessEqual(loss.item(), 2.0)
 
-    mask = torch.randint(0, 2, (2, 1, 10, 10)).float()
-    loss_masked = loss_fn(logits, targets, mask)
-    self.assertIsInstance(loss_masked.item(), float)
-    self.assertGreaterEqual(loss_masked.item(), -1.0)
-    self.assertLessEqual(loss_masked.item(), 2.0)
+    weight = torch.randint(0, 2, (2, 1, 10, 10)).float()
+    loss_weighted = loss_fn(logits, targets, weight)
+    self.assertIsInstance(loss_weighted.item(), float)
+    self.assertGreaterEqual(loss_weighted.item(), -1.0)
+    self.assertLessEqual(loss_weighted.item(), 2.0)
 
     # Test with perfect prediction
     logits_perfect = targets * 100.0 - (1 - targets) * 100.0
     loss_perfect = loss_fn(logits_perfect, targets)
     self.assertAlmostEqual(loss_perfect.item(), 0.0, places=3)
+
+  def test_segmentation_cross_entropy_loss(self):
+    loss_fn = losses.SegmentationCrossEntropyLoss()
+    logits = torch.randn(2, 3, 10, 10)
+    targets = torch.randint(0, 3, (2, 10, 10)).long()
+    weight = torch.randint(0, 2, (2, 1, 10, 10)).float()
+    targets_onehot = (
+        torch.nn.functional.one_hot(targets, num_classes=3)
+        .permute(0, 3, 1, 2)
+        .float()
+    )
+    loss = loss_fn(logits, targets_onehot, weight)
+    self.assertIsInstance(loss.item(), float)
+    self.assertGreaterEqual(loss.item(), 0.0)
 
 
 if __name__ == '__main__':

@@ -14,7 +14,6 @@
 
 """Loss functions for imbalanced semantic segmentation."""
 
-from typing import Optional
 import torch
 from torch import nn
 from torchvision import ops
@@ -22,14 +21,78 @@ from torchvision import ops
 sigmoid_focal_loss = ops.sigmoid_focal_loss
 
 
+def _validate_shapes(
+    logits: torch.Tensor,
+    target: torch.Tensor,
+    weight: torch.Tensor | None = None,
+):
+  """Validates the shapes of the logits, targets, and weight tensors.
+
+  The logits must be a 3+D tensor of shape ([B...], C, H, W).
+  The targets must be a 3+D tensor of shape ([B...], C, H, W).
+  The weight can be None or a 3+D tensor of shape ([B...], 1, H, W).
+
+  The values of [B...] (optional extra dimensions), C (number of classes), H
+  (height) and W (width) must be consistent across the tensors.
+
+  Args:
+    logits: The raw logits from the model.
+    target: The ground truth targets.
+    weight: An optional weight tensor.
+
+  Raises:
+    ValueError: If the shapes of the logits, targets, or weight tensors are
+      invalid.
+  """
+  if logits.dim() < 3:
+    raise ValueError(
+        f'Logits shape must be ([B...], C, H, W), got {logits.shape}.'
+    )
+  if target.dim() < 3:
+    raise ValueError(
+        f'Target shape must be ([B...], C, H, W), got {target.shape}.'
+    )
+  if logits.shape != target.shape:
+    raise ValueError(
+        f'Logits shape {logits.shape} and targets shape {target.shape} must be '
+        'identical.'
+    )
+  if weight is not None:
+    if weight.dim() < 3:
+      raise ValueError(
+          f'Weight must have shape ([B...], 1, H, W), got {weight.shape}.'
+      )
+    if weight.shape[-3] != 1:
+      raise ValueError(
+          f'Weight must have shape ([B...], 1, H, W), got {weight.shape}.'
+      )
+    b = logits.shape[:-3]
+    h = logits.shape[-2]
+    w = logits.shape[-1]
+    if weight.shape != (*b, 1, h, w):
+      raise ValueError(
+          f'Weight shape {weight.shape} must match logits shape'
+          f' {logits.shape} in batch, height, and width dimensions.'
+      )
+
+
+def _aggregation_dims(
+    rank: int,
+    per_image: bool = False,
+) -> tuple[int, ...]:
+  dims = (rank - 2, rank - 1)
+  if not per_image:
+    dims = tuple(range(rank - 3)) + dims
+  return dims
+
+
 class SegmentationDiceLoss(nn.Module):
   """Dice loss for segmentation.
 
   Supports binary and multi-class segmentation.
   Dice loss optimizes for region overlap between the predicted segmentation
-  mask and the ground truth mask by summing over the spatial dimensions.
+  weight and the ground truth weight by summing over the spatial dimensions.
   It is effective when overlap-based performance is important.
-
   """
 
   def __init__(self, epsilon: float = 1e-6, per_image_loss: bool = False):
@@ -49,37 +112,29 @@ class SegmentationDiceLoss(nn.Module):
       self,
       logits: torch.Tensor,
       targets: torch.Tensor,
-      mask: Optional[torch.Tensor] = None,
+      weight: torch.Tensor | None = None,
   ) -> torch.Tensor:
     """Computes the Dice loss.
 
+    if `per_image_loss` is True, the loss is calculated per image and then
+    averaged over the batch. Otherwise, the loss is calculated over the entire
+    batch.
+
     Args:
-      logits: The raw logits from the model. Expected shape is (B, C, H, W).
-        If C=1, binary segmentation is assumed, if C>1, multi-class.
-      targets: The ground truth segmentation masks, one-hot encoded.
-        Expected shape is (B, C, H, W).
-      mask: An optional mask tensor to apply to the loss computation. If
-        provided, loss is only computed for masked pixels. Expected shape is (B,
-        1, H, W).
+      logits: The raw logits from the model. Expected shape is ([B...], C, H,
+        W). If C=1, binary segmentation is assumed, if C>1, multi-class.
+      targets: The ground truth segmentation masks, one-hot encoded. Expected
+        shape is ([B...], C, H, W).
+      weight: An optional weight tensor to apply to the loss computation. If
+        provided, each pixel has its own weight. Expected shape is ([B...], 1,
+        H, W).
 
     Returns:
-      The mean Dice loss.
+      The mean Dice loss (a single scalar value).
     """
-    if logits.dim() != 4:
-      raise ValueError(
-          f'Logits must have shape (B, C, H, W), got {logits.shape}.'
-      )
-    if targets.dim() != 4:
-      raise ValueError(
-          f'Targets must have shape (B, C, H, W), got {targets.shape}.'
-      )
-    if logits.shape != targets.shape:
-      raise ValueError(
-          f'Logits shape {logits.shape} and targets shape {targets.shape} must'
-          ' be identical.'
-      )
+    _validate_shapes(logits, targets, weight)
 
-    num_classes = logits.shape[1]
+    num_classes = logits.shape[-3]
 
     if num_classes == 1:
       probs = torch.sigmoid(logits)
@@ -88,27 +143,87 @@ class SegmentationDiceLoss(nn.Module):
 
     targets = targets.float()
 
-    dims = (2, 3) if self.per_image_loss else (0, 2, 3)
+    dims = _aggregation_dims(logits.dim(), self.per_image_loss)
 
-    if mask is None:
+    if weight is None:
       intersection = (probs * targets).sum(dim=dims)
       p_sum = probs.sum(dim=dims)
       t_sum = targets.sum(dim=dims)
     else:
-      if mask.dim() != 4 or mask.shape[1] != 1:
-        raise ValueError(
-            f'Mask must have shape (B, 1, H, W), got {mask.shape}.'
-        )
-
-      mask = mask.float()
-      intersection = (probs * targets * mask).sum(dim=dims)
-      p_sum = (probs * mask).sum(dim=dims)
-      t_sum = (targets * mask).sum(dim=dims)
+      weight = weight.float()
+      intersection = (probs * targets * weight).sum(dim=dims)
+      p_sum = (probs * weight).sum(dim=dims)
+      t_sum = (targets * weight).sum(dim=dims)
 
     dice = (2.0 * intersection + self.epsilon) / (p_sum + t_sum + self.epsilon)
 
     loss = 1.0 - dice
     return loss.mean()
+
+
+class SegmentationJaccardLoss(nn.Module):
+  """Jaccard loss for segmentation.
+
+  Supports binary and multi-class segmentation.
+  Jaccard loss optimizes directly for Intersection over Union (IoU).
+  """
+
+  def __init__(self, epsilon: float = 1e-6, per_image_loss: bool = False):
+    """Initializes the Jaccard loss.
+
+    Args:
+      epsilon: A small epsilon value to add to the numerator and denominator to
+        avoid division by zero.
+      per_image_loss: Whether to calculates Jaccard loss per image or per batch.
+    """
+    super().__init__()
+    self.epsilon = epsilon
+    self.per_image_loss = per_image_loss
+
+  def forward(
+      self,
+      logits: torch.Tensor,
+      targets: torch.Tensor,
+      weight: torch.Tensor | None = None,
+  ) -> torch.Tensor:
+    """Computes the Jaccard loss.
+
+    if `per_image_loss` is True, the loss is calculated per image and then
+    averaged over the batch. Otherwise, the loss is calculated over the entire
+    batch.
+
+    Args:
+      logits: The raw logits from the model. Expected shape is ([B...], C, H,
+        W). If C=1, binary segmentation is assumed, if C>1, multi-class.
+      targets: The ground truth segmentation masks, one-hot encoded. Expected
+        shape is ([B...], C, H, W).
+      weight: An optional weight tensor to apply to the loss computation. If
+        provided, each pixel has its own weight. Expected shape is ([B...], 1,
+        H, W).
+
+    Returns:
+      The mean Jaccard loss (a single scalar value).
+    """
+    _validate_shapes(logits, targets, weight)
+
+    if logits.shape[-3] == 1:
+      probs = torch.sigmoid(logits)
+    else:  # num_classes > 1
+      probs = torch.softmax(logits, dim=1)
+
+    targets = targets.float()
+    intersection = probs * targets
+    sum_probs_targets = probs + targets
+    if weight is not None:
+      intersection *= weight
+      sum_probs_targets *= weight
+
+    dims = _aggregation_dims(logits.dim(), self.per_image_loss)
+
+    intersection = intersection.sum(dim=dims)
+    union = sum_probs_targets.sum(dim=dims) - intersection
+    iou = (intersection + self.epsilon) / (union + self.epsilon)
+    return 1.0 - iou.mean()
 
 
 class SegmentationFocalLoss(nn.Module):
@@ -138,34 +253,23 @@ class SegmentationFocalLoss(nn.Module):
       self,
       logits: torch.Tensor,
       targets: torch.Tensor,
-      mask: Optional[torch.Tensor] = None,
+      weight: torch.Tensor | None = None,
   ) -> torch.Tensor:
     """Computes the focal loss.
 
     Args:
-      logits: The raw logits from the model. Expected shape is (B, C, H, W).
-      targets: The ground truth segmentation masks, one-hot encoded.
-        Expected shape is (B, C, H, W).
-      mask: An optional mask tensor. Expected shape is (B, 1, H, W).
+      logits: The raw logits from the model. Expected shape is ([B...], C, H,
+        W).
+      targets: The ground truth segmentation masks, one-hot encoded. Expected
+        shape is ([B...], C, H, W).
+      weight: An optional weight tensor. Expected shape is ([B...], 1, H, W).
 
     Returns:
       The Focal loss over the batch.
     """
-    if logits.dim() != 4:
-      raise ValueError(
-          f'Logits must have shape (B, C, H, W), got {logits.shape}.'
-      )
-    if targets.dim() != 4:
-      raise ValueError(
-          f'Targets must have shape (B, C, H, W), got {targets.shape}.'
-      )
-    if logits.shape != targets.shape:
-      raise ValueError(
-          f'Logits shape {logits.shape} and targets shape {targets.shape} must'
-          ' be identical.'
-      )
+    _validate_shapes(logits, targets, weight)
 
-    num_classes = logits.shape[1]
+    num_classes = logits.shape[-3]
     targets_onehot = targets.float()
 
     focal_loss = ops.sigmoid_focal_loss(
@@ -176,14 +280,10 @@ class SegmentationFocalLoss(nn.Module):
         reduction='none',
     )
 
-    if mask is not None:
-      if mask.dim() != 4 or mask.shape[1] != 1:
-        raise ValueError(
-            f'Mask must have shape (B, 1, H, W), got {mask.shape}.'
-        )
-      mask_expanded = mask.float()
-      focal_loss = focal_loss * mask_expanded
-      valid_elements = mask_expanded.sum() * num_classes
+    if weight is not None:
+      weight_expanded = weight.float()
+      focal_loss = focal_loss * weight_expanded
+      valid_elements = weight_expanded.sum() * num_classes
       focal_loss = focal_loss.sum() / valid_elements.clamp(min=1.0)
     else:
       focal_loss = focal_loss.mean()
@@ -216,45 +316,29 @@ def _lovasz_grad(gt_sorted: torch.Tensor) -> torch.Tensor:
 def _flatten_probs(
     probs: torch.Tensor,
     labels: torch.Tensor,
-    mask: Optional[torch.Tensor] = None,
+    mask: torch.Tensor | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-  """Flattens predictions in the batch dimension and filters by mask.
+  """Flattens predictions in the batch dimension and filters by weight.
 
   Args:
-    probs: Probability tensor of shape (B, C, H, W).
-    labels: Class label tensor of shape (B, H, W).
-    mask: Optional mask tensor of shape (B, 1, H, W) or (B, H, W). If provided,
-      only elements where mask > 0 are kept.
+    probs: Probability tensor of shape ([B...], C, H, W).
+    labels: Class label tensor of shape ([B...], B, H, W).
+    mask: Optional boolean mask tensor of shape ([B...], 1, H, W). If provided,
+      only positive elements are kept.
 
   Returns:
     A tuple of flattened tensors (probs, labels), where probs has shape
     (N, C) and labels has shape (N,), and N is the number of valid elements.
   """
-  if probs.dim() != 4:
-    raise ValueError(f'Probs must have shape (B, C, H, W), got {probs.shape}.')
-  if labels.dim() != 3:
-    raise ValueError(f'Labels must have shape (B, H, W), got {labels.shape}.')
-
   _, num_classes, _, _ = probs.shape
   probs = probs.permute(0, 2, 3, 1).reshape(-1, num_classes)  # (B*H*W, C)
   labels = labels.reshape(-1)  # (B*H*W)
 
   if mask is None:
     return probs, labels
-  if mask.dim() == 4:
-    if mask.shape[1] != 1:
-      raise ValueError(
-          f'Mask must have shape (B, 1, H, W) or (B, H, W), got {mask.shape}.'
-      )
-  elif mask.dim() != 3:
-    raise ValueError(
-        f'Mask must have shape (B, 1, H, W) or (B, H, W), got {mask.shape}.'
-    )
-
-  mask = mask.float().reshape(-1)
-  valid = mask > 0
-  probs = probs[valid]
-  labels = labels[valid]
+  mask = mask.reshape(-1)
+  probs = probs[mask]
+  labels = labels[mask]
   return probs, labels
 
 
@@ -323,49 +407,58 @@ class SegmentationLovaszSoftmaxLoss(nn.Module):
       self,
       logits: torch.Tensor,
       targets: torch.Tensor,
-      mask: Optional[torch.Tensor] = None,
+      weight: torch.Tensor | None = None,
   ) -> torch.Tensor:
     """Computes the Lovasz-Softmax loss.
 
     Args:
-      logits: The raw logits from the model. Expected shape is (B, C, H, W).
+      logits: The raw logits from the model. Expected shape is ([B...], C, H,
+        W).
       targets: The ground truth segmentation masks, one-hot encoded. Expected
-        shape is (B, C, H, W).
-      mask: An optional mask tensor. Expected shape is (B, 1, H, W).
+        shape is ([B...], C, H, W).
+      weight: An optional weight tensor. Expected shape is ([B...], B, 1, H, W).
+        note that unlike other losses, the weight is only used as a binary mask,
+        so weight > 0 is treated as 1, and weight = 0 is treated as 0.
 
     Returns:
       The Lovasz-Softmax loss over the batch.
     """
-    if logits.dim() != 4:
-      raise ValueError(
-          f'Logits must have shape (B, C, H, W), got {logits.shape}.'
-      )
-    if targets.dim() != 4:
-      raise ValueError(
-          f'Targets must have shape (B, C, H, W), got {targets.shape}.'
-      )
-    if logits.shape != targets.shape:
-      raise ValueError(
-          f'Logits shape {logits.shape} and targets shape {targets.shape} must'
-          ' be identical.'
-      )
-    if logits.shape[1] == 1:
-      raise ValueError('Lovasz-Softmax loss requires C>1.')
+    _validate_shapes(logits, targets, weight)
 
     labels = targets.argmax(dim=1).long()
     probs = torch.softmax(logits, dim=1)
+    mask = weight > 0 if weight is not None else None
     probs_flat, labels_flat = _flatten_probs(probs, labels, mask)
-    return _lovasz_softmax_flat(
-        probs_flat, labels_flat, classes=self.classes
-    )
+    return _lovasz_softmax_flat(probs_flat, labels_flat, classes=self.classes)
+
+
+class SegmentationCrossEntropyLoss(nn.Module):
+  """A Cross-Entropy loss with the commmon API of segmentation losses."""
+
+  def __init__(self, epsilon: float = 1e-6):
+    super().__init__()
+    self.xent = torch.nn.CrossEntropyLoss(reduction='none')
+    self.epsilon = epsilon
+
+  def forward(
+      self,
+      logits: torch.Tensor,
+      targets: torch.Tensor,
+      weight: torch.Tensor | None = None,
+  ) -> torch.Tensor:
+    _validate_shapes(logits, targets, weight)
+    per_pixel_xent = self.xent(logits, targets)
+    if weight is None:
+      return per_pixel_xent.mean()
+    return (per_pixel_xent * weight).sum() / (weight.sum() + self.epsilon)
 
 
 class CombinedLoss(nn.Module):
   """Computes a weighted sum of multiple loss functions.
 
   This is useful for combining different loss functions, e.g., Focal loss and
-  Dice loss for binary segmentation, with
-  potentially varying weights across training epochs.
+  Dice loss for binary segmentation, with potentially varying weights across
+  training epochs.
   """
 
   def __init__(
@@ -392,21 +485,20 @@ class CombinedLoss(nn.Module):
       self,
       logits: torch.Tensor,
       targets: torch.Tensor,
-      mask: Optional[torch.Tensor] = None,
+      weight: torch.Tensor | None = None,
   ) -> torch.Tensor:
     """Computes the weighted sum of losses.
 
     Args:
       logits: The raw logits from the model.
       targets: The ground truth targets.
-      mask: An optional mask tensor passed to each loss function.
+      weight: An optional weight tensor passed to each loss function.
 
     Returns:
       The combined loss over the batch.
     """
     total_loss = torch.tensor(0.0, device=logits.device)
 
-    for weight, loss_fn in zip(self.weights, self.losses):
-      total_loss += weight * loss_fn(logits, targets, mask)
+    for loss_weight, loss_fn in zip(self.weights, self.losses):
+      total_loss += loss_weight * loss_fn(logits, targets, weight)
     return total_loss
-
