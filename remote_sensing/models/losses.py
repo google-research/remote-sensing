@@ -14,6 +14,7 @@
 
 """Loss functions for imbalanced semantic segmentation."""
 
+from collections.abc import Callable
 import torch
 from torch import nn
 from torchvision import ops
@@ -457,8 +458,7 @@ class CombinedLoss(nn.Module):
   """Computes a weighted sum of multiple loss functions.
 
   This is useful for combining different loss functions, e.g., Focal loss and
-  Dice loss for binary segmentation, with potentially varying weights across
-  training epochs.
+  Dice loss for binary segmentation.
   """
 
   def __init__(
@@ -502,3 +502,39 @@ class CombinedLoss(nn.Module):
     for loss_weight, loss_fn in zip(self.weights, self.losses):
       total_loss += loss_weight * loss_fn(logits, targets, weight)
     return total_loss
+
+
+class ProgressiveCombinedLoss(CombinedLoss):
+  """A combined loss where the weights progress over time.
+
+  The weights are determined by a weights_provider function that takes the
+  current step and total steps as input and returns a list of weights.
+
+  The user should call next_step() in order to update the weights.
+  Notice that 'step' can be a single batch, or an entire epoch, depending on the
+  user's implementation.
+
+  Attributes:
+    losses: The list of loss modules.
+    weights: The list of weights corresponding to each loss.
+    weights_provider: The function that provides the weights. Takes current
+      step and total steps as input and returns a list of weights.
+    total_steps: The total number of training steps.
+    current_step: The current training step.
+  """
+
+  def __init__(
+      self,
+      losses: list[nn.Module],
+      weights_provider: Callable[[int, int], list[float]],
+      total_steps: int,
+  ):
+    super().__init__(losses, weights=weights_provider(0, total_steps))
+    self.weights_provider = weights_provider
+    self.total_steps = total_steps
+    self.current_step = 0
+
+  def next_step(self) -> None:
+    """Updates the weights to the next step."""
+    self.current_step += 1
+    self.weights = self.weights_provider(self.current_step, self.total_steps)

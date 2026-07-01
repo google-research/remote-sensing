@@ -166,6 +166,29 @@ class LossesTest(absltest.TestCase):
     self.assertIsInstance(loss.item(), float)
     self.assertGreaterEqual(loss.item(), 0.0)
 
+  def test_progressive_combined_loss(self):
+    class DummyLoss(torch.nn.Module):
+
+      def __init__(self, value: float):
+        super().__init__()
+        self.value = value
+
+      def forward(self, logits, targets, weight=None):
+        return self.value
+
+    def weights_fn(cur_step: int, total_steps: int) -> list[float]:
+      return [1 - cur_step / total_steps, cur_step / total_steps]
+
+    combined_loss = losses.ProgressiveCombinedLoss(
+        losses=[DummyLoss(100), DummyLoss(200)],
+        weights_provider=weights_fn,
+        total_steps=50
+    )
+    x = torch.ones((1,))  # Dummy input
+    for i in range(51):
+      self.assertAlmostEqual(combined_loss(x, x).item(), 100 + i * 2, places=3)
+      combined_loss.next_step()
+
 
 if __name__ == '__main__':
   absltest.main()
