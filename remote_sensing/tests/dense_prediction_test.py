@@ -143,15 +143,26 @@ class DensePredictionTest(parameterized.TestCase):
         decoder_config=decoder_config,
     )
     model = dense_prediction.ViTEncoderDecoderModel(composite_config)
+    segmentation_model = dense_prediction.ViTEncoderDecoderSegmentation(
+        model, num_classes=7
+    )
     model.eval()
+    segmentation_model.eval()
     with torch.no_grad():
-      out = model(torch.ones((4, 3, 32, 32), dtype=torch.float32))
-    self.assertEqual(out.shape, (4, 32, 32, 8))
-    # Check that outputs are bounded by Tanh [-1, 1]
-    self.assertTrue(torch.all(out >= -1.0))
-    self.assertTrue(torch.all(out <= 1.0))
+      img = torch.ones((4, 3, 32, 32), dtype=torch.float32)
+      model_out = model(img)
+      segmentation_out = segmentation_model(img)
+    # Check output shapes
+    self.assertEqual(model_out.shape, (4, 32, 32, 8))
+    # Batch size, num classes, height, width (after permutation per torch
+    # convention)
+    self.assertEqual(segmentation_out.shape, (4, 7, 32, 32))
+    # Check that decoder outputs are bounded by Tanh [-1, 1]
+    self.assertTrue(torch.all(model_out >= -1.0))
+    self.assertTrue(torch.all(model_out <= 1.0))
     # Check for finite values
-    self.assertTrue(torch.all(torch.isfinite(out)))
+    self.assertTrue(torch.all(torch.isfinite(model_out)))
+    self.assertTrue(torch.all(torch.isfinite(segmentation_out)))
 
   def test_skip_unet_decoder_config(self):
     config = dense_prediction.SkipUNetDecoderConfig(

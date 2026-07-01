@@ -308,6 +308,26 @@ class ViTEncoderDecoderModel(transformers.PreTrainedModel):
     return self.decoder(encoder_features)
 
 
+class ViTEncoderDecoderSegmentation(nn.Module):
+  """A Segmentation model with a ViT encoder-decoder backbone."""
+
+  def __init__(self, encoder_decoder: ViTEncoderDecoderModel, num_classes: int):
+    super().__init__()
+    self.encoder_decoder = encoder_decoder
+    self.projection = nn.Conv2d(
+        in_channels=self.encoder_decoder.decoder_config.output_dims,
+        out_channels=num_classes,
+        kernel_size=1,
+        stride=1,
+        padding=0,
+    )
+
+  def forward(self, x: torch.Tensor) -> torch.Tensor:
+    x = self.encoder_decoder(x).permute(0, 3, 1, 2)
+    x = self.projection(x)
+    return x
+
+
 class ViTUNetSegmentationModel(transformers.PreTrainedModel):
   """ViT-based segmentation model with a UNet-style decoder.
 
