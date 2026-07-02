@@ -508,33 +508,35 @@ class ProgressiveCombinedLoss(CombinedLoss):
   """A combined loss where the weights progress over time.
 
   The weights are determined by a weights_provider function that takes the
-  current step and total steps as input and returns a list of weights.
+  current iteration and total iterations as input and returns a list of weights.
 
-  The user should call next_step() in order to update the weights.
-  Notice that 'step' can be a single batch, or an entire epoch, depending on the
-  user's implementation.
+  The user should call step() in order to update the weights.
+  Notice that 'iteration' can be a single batch, or an entire epoch, depending
+  on the user's implementation.
 
   Attributes:
     losses: The list of loss modules.
     weights: The list of weights corresponding to each loss.
     weights_provider: The function that provides the weights. Takes current
-      step and total steps as input and returns a list of weights.
-    total_steps: The total number of training steps.
-    current_step: The current training step.
+      iteration and total iterations as input and returns a list of weights.
+    total_iterations: The total number of training iterations.
+    current_iteration: The current training iteration.
   """
 
   def __init__(
       self,
       losses: list[nn.Module],
       weights_provider: Callable[[int, int], list[float]],
-      total_steps: int,
+      total_iterations: int,
   ):
-    super().__init__(losses, weights=weights_provider(0, total_steps))
+    super().__init__(losses, weights=weights_provider(0, total_iterations))
     self.weights_provider = weights_provider
-    self.total_steps = total_steps
-    self.current_step = 0
+    self.total_iterations = total_iterations
+    self.current_iteration = 0
 
-  def next_step(self) -> None:
-    """Updates the weights to the next step."""
-    self.current_step += 1
-    self.weights = self.weights_provider(self.current_step, self.total_steps)
+  def step(self) -> None:
+    """Updates the weights to the next iteration."""
+    self.current_iteration += 1
+    self.weights = self.weights_provider(
+        self.current_iteration, self.total_iterations
+    )
