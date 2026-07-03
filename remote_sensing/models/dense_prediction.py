@@ -158,7 +158,7 @@ class ViTDecoder(transformers.PreTrainedModel):
       )
       # Initialize with 2D sin-cos embeddings
       grid_size = int(self.num_patches**0.5)
-      sincos2d = positional_embeddings.Sincos2dEmbeddings(self.config)
+      sincos2d = positional_embeddings.Sincos2dEmbeddings(self.config)  # pyrefly: ignore[bad-argument-type]
       decoder_pos_embed = sincos2d.compute_sincos2d_embeddings(
           h=grid_size,
           w=grid_size,
@@ -169,7 +169,7 @@ class ViTDecoder(transformers.PreTrainedModel):
       raise ValueError(f"Unsupported pos_emb_type: {config.pos_emb_type}")
 
     self.decoder_transformer = transformers.models.vit.modeling_vit.ViTEncoder(
-        config
+        config  # pyrefly: ignore[bad-argument-type]
     )
 
     self.decoder_norm = nn.LayerNorm(
@@ -291,7 +291,7 @@ class ViTEncoderDecoderModel(transformers.PreTrainedModel):
     self.norm = nn.LayerNorm(
         self.encoder_config.hidden_size, eps=self.encoder_config.layer_norm_eps
     )
-    self.decoder = ViTDecoder(config=self.decoder_config)
+    self.decoder = ViTDecoder(config=self.decoder_config)  # pyrefly: ignore[bad-argument-type]
 
     self.post_init()
 
@@ -359,7 +359,7 @@ class ViTUNetSegmentationModel(transformers.PreTrainedModel):
 
   @classmethod
   def init_from_config(cls, config: EncoderDecoderConfig):
-    encoder = vits.PretrainedRemoteSensingVit(config.encoder_config)
+    encoder = vits.PretrainedRemoteSensingVit(config.encoder_config)  # pyrefly: ignore[bad-argument-type]
 
     if not config.encoder_config:
       raise ValueError("encoder_config must be provided.")
@@ -427,10 +427,10 @@ class ViTUNetSegmentationModel(transformers.PreTrainedModel):
           "ViTUNetSegmentationModel."
       )
 
-    self.encoder_config: transformers.ViTConfig = config.encoder_config
+    self.encoder_config: transformers.ViTConfig = config.encoder_config  # pyrefly: ignore[bad-assignment]
     self.decoder_config: SkipUNetDecoderConfig = config.decoder_config
 
-    self.encoder: transformers.ViTModel = encoder
+    self.encoder: transformers.ViTModel = encoder  # pyrefly: ignore[bad-assignment]
     self.decoder: architectures.ViTUNetDecoder = decoder
     self.patch_size: int = self.encoder_config.patch_size
     self._features: dict[str, torch.Tensor] = {}

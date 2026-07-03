@@ -306,7 +306,7 @@ def _lovasz_grad(gt_sorted: torch.Tensor) -> torch.Tensor:
   num_elements = gt_sorted.numel()
   gt_sum = gt_sorted.sum()
   intersection = gt_sum - gt_sorted.float().cumsum(0)
-  union = gt_sum + (1.0 - gt_sorted).float().cumsum(0)
+  union = gt_sum + (1.0 - gt_sorted).float().cumsum(0)  # pyrefly: ignore[missing-attribute]
   jaccard = 1.0 - intersection / union.clamp_min(1e-6)
 
   if num_elements > 1:

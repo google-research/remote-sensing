@@ -45,7 +45,7 @@ class Sincos2dEmbeddings(nn.Module):
   def __init__(self, config: transformers.ViTConfig) -> None:
     super().__init__()
 
-    self.patch_embeddings = modeling_vit.ViTPatchEmbeddings(config)
+    self.patch_embeddings = modeling_vit.ViTPatchEmbeddings(config)  # pyrefly: ignore[bad-argument-type]
     self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     self.patch_size = config.patch_size
@@ -103,7 +103,7 @@ class Sincos2dEmbeddings(nn.Module):
     positions = torch.einsum('S,D->SD', positions, inv_freq)
     sin = torch.sin(positions)
     cos = torch.cos(positions)
-    return torch.concatenate([sin, cos], axis=-1)
+    return torch.concatenate([sin, cos], axis=-1)  # pyrefly: ignore[unexpected-keyword]
 
   def _compute_2d_embeddings(
       self, h: int, w: int, hidden_dim: int
@@ -122,7 +122,7 @@ class Sincos2dEmbeddings(nn.Module):
             torch.tile(pos_emb_h[:, None, :], [1, w, 1]),
             torch.tile(pos_emb_w[None, :, :], [h, 1, 1]),
         ],
-        axis=-1,
+        axis=-1,  # pyrefly: ignore[unexpected-keyword]
     )
     return pos_emb_2d
 

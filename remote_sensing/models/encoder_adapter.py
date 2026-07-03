@@ -60,9 +60,9 @@ def patch_encoder_to_multispectral(
   new_proj = nn.Conv2d(
       in_channels=len(target_channels),
       out_channels=old_proj.out_channels,
-      kernel_size=old_proj.kernel_size,
-      stride=old_proj.stride,
-      padding=old_proj.padding,
+      kernel_size=old_proj.kernel_size,  # pyrefly: ignore[bad-argument-type]
+      stride=old_proj.stride,  # pyrefly: ignore[bad-argument-type]
+      padding=old_proj.padding,  # pyrefly: ignore[bad-argument-type]
       bias=(old_proj.bias is not None),
   )
 
@@ -75,7 +75,7 @@ def patch_encoder_to_multispectral(
       else:
         new_proj.weight[:, new_idx] = mean_weights
     if old_proj.bias is not None:
-      new_proj.bias.copy_(old_proj.bias)
+      new_proj.bias.copy_(old_proj.bias)  # pyrefly: ignore[missing-attribute]
 
   encoder.embeddings.patch_embeddings.projection = new_proj
   encoder.config.num_channels = len(target_channels)

@@ -47,7 +47,7 @@ class PretrainedRemoteSensingVit(transformers.ViTPreTrainedModel):
     self.config = config
 
     self.embeddings = positional_embeddings.Sincos2dEmbeddings(config)
-    self.encoder = modeling_vit.ViTEncoder(config)
+    self.encoder = modeling_vit.ViTEncoder(config)  # pyrefly: ignore[bad-argument-type]
 
     if add_layer_norm:
       self.layernorm = nn.LayerNorm(
@@ -56,7 +56,7 @@ class PretrainedRemoteSensingVit(transformers.ViTPreTrainedModel):
     else:
       self.layernorm = None
 
-    self.pooler = transformers.ViTPooler(config) if add_pooling_layer else None
+    self.pooler = transformers.ViTPooler(config) if add_pooling_layer else None  # pyrefly: ignore[missing-attribute]
 
     # Initialize weights and apply final processing
     self.post_init()
