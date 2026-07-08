@@ -18,9 +18,13 @@ This module currently contains a UNet-style architecture for semantic
 segmentation with ViT encoders.
 """
 
+import collections
 import torch
 from torch import nn
 import torch.nn.functional as F
+
+
+OrderedDict = collections.OrderedDict
 
 
 class ConvBlock(nn.Module):
@@ -162,3 +166,157 @@ class ViTUNetDecoder(nn.Module):
 
     x = self.refine(x)
     return self.pred_head(x)
+
+
+class ViTBackbonePyramid(nn.Module):
+  """A Vision Transformer (ViT) backbone with a single-feature spatial pyramid.
+
+  The final ViT patch-token representation is reshaped into a spatial
+  feature map. Additional feature levels are produced using interpolation
+  and pooling for use with Torchvision detection models.
+  """
+
+  def __init__(
+      self,
+      encoder: nn.Module,
+      image_size: int,
+      out_channels: int = 256,
+      freeze_encoder: bool = False,
+  ):
+    """Initializes the ViT backbone pyramid.
+
+    Args:
+        encoder: Pretrained Vision Transformer encoder module.
+        image_size: Input image resolution.
+        out_channels: Number of channels in each pyramid feature map.
+        freeze_encoder: Whether to freeze the pretrained ViT encoder.
+    """
+    super().__init__()
+
+    self.encoder: nn.Module = encoder
+
+    self.image_size: int = image_size
+    self.patch_size: int = self.encoder.config.patch_size
+    self.hidden_size: int = self.encoder.config.hidden_size
+
+    if self.patch_size not in (8, 16, 32):
+      raise ValueError(
+          f"Expected patch size in (8, 16, 32), got {self.patch_size}."
+      )
+
+    if self.image_size % self.patch_size != 0:
+      raise ValueError(
+          f"image_size={self.image_size} must be divisible by "
+          f"patch_size={self.patch_size}."
+      )
+
+    self.projection: nn.Sequential = nn.Sequential(
+        nn.Conv2d(
+            self.hidden_size,
+            out_channels,
+            kernel_size=1,
+        ),
+        nn.GroupNorm(32, out_channels),
+        nn.ReLU(inplace=True),
+        nn.Conv2d(
+            out_channels,
+            out_channels,
+            kernel_size=3,
+            padding=1,
+        ),
+        nn.GroupNorm(32, out_channels),
+        nn.ReLU(inplace=True),
+    )
+
+    # Required by Torchvision detection models.
+    self.out_channels: int = out_channels
+
+    if freeze_encoder:
+      for parameter in self.encoder.parameters():
+        parameter.requires_grad = False
+
+  def forward(self, images: torch.Tensor) -> OrderedDict[str, torch.Tensor]:
+    """Extracts the multi-scale ViT feature pyramid.
+
+    Args:
+        images: Input tensor with shape (B, C, H, W).
+
+    Returns:
+        Ordered dictionary containing feature maps at strides 4, 8, 16, 32, and
+        64 relative to the input image spatial resolution (H, W).
+    """
+    encoder_output = self.encoder(images)
+    tokens = encoder_output.last_hidden_state
+
+    batch_size, num_tokens, hidden_dim = tokens.shape
+    # The input spatial dimensions (height, width) directly determine the
+    # resolution of each pyramid level, where level P_k has spatial stride 2^k
+    # (i.e. dimensions height // 2^k and width // 2^k relative to the image).
+    height, width = images.shape[-2:]
+
+    patch_height = height // self.patch_size
+    patch_width = width // self.patch_size
+    expected_tokens = patch_height * patch_width
+
+    if num_tokens != expected_tokens:
+      raise ValueError(
+          f"Unexpected token count: received {num_tokens}, "
+          f"expected {expected_tokens} "
+          f"({patch_height} x {patch_width})."
+      )
+
+    features = tokens.reshape(
+        batch_size,
+        patch_height,
+        patch_width,
+        hidden_dim,
+    )
+
+    features = features.permute(0, 3, 1, 2).contiguous()
+    features = self.projection(features)
+
+    if self.patch_size == 16:
+      # For patch_size=16, the base feature map has spatial stride 16 (P4).
+      # We define P4 first, then derive P3 and P2 via 2x upsampling, and P5 and
+      # P6 via 2x max pooling.
+      p4 = features
+      p3 = F.interpolate(
+          p4, scale_factor=2, mode="bilinear", align_corners=False
+      )
+      p2 = F.interpolate(
+          p3, scale_factor=2, mode="bilinear", align_corners=False
+      )
+      p5 = F.max_pool2d(p4, kernel_size=2, stride=2)
+      p6 = F.max_pool2d(p5, kernel_size=2, stride=2)
+    elif self.patch_size == 8:
+      # For patch_size=8, the base feature map has spatial stride 8 (level P3).
+      # We derive P2 via upsampling, and P4, P5, and P6 via max pooling.
+      p3 = features
+      p2 = F.interpolate(
+          p3, scale_factor=2, mode="bilinear", align_corners=False
+      )
+      p4 = F.max_pool2d(p3, kernel_size=2, stride=2)
+      p5 = F.max_pool2d(p4, kernel_size=2, stride=2)
+      p6 = F.max_pool2d(p5, kernel_size=2, stride=2)
+    else:  # self.patch_size == 32
+      # For patch_size=32, the base feature map has spatial stride 32 (level
+      # P5). We derive P4, P3, and P2 via upsampling, and P6 via max pooling.
+      p5 = features
+      p4 = F.interpolate(
+          p5, scale_factor=2, mode="bilinear", align_corners=False
+      )
+      p3 = F.interpolate(
+          p4, scale_factor=2, mode="bilinear", align_corners=False
+      )
+      p2 = F.interpolate(
+          p3, scale_factor=2, mode="bilinear", align_corners=False
+      )
+      p6 = F.max_pool2d(p5, kernel_size=2, stride=2)
+
+    return OrderedDict({
+        "0": p2,
+        "1": p3,
+        "2": p4,
+        "3": p5,
+        "4": p6,
+    })

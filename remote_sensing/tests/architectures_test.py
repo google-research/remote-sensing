@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from absl.testing import absltest
 from remote_sensing.models import architectures
 import torch
@@ -42,6 +41,12 @@ class FakeEncoderLayers(nn.Module):
     return x
 
 
+class FakeOutput:
+
+  def __init__(self, last_hidden_state):
+    self.last_hidden_state = last_hidden_state
+
+
 class FakePretrainedVit(nn.Module):
 
   def __init__(self, config):
@@ -50,18 +55,11 @@ class FakePretrainedVit(nn.Module):
     self.encoder = FakeEncoderLayers()
 
   def forward(self, x):
-    # Fake embedding: x is (B, C, H, W) -> we need (B, sequence_length, dim)
     b = x.shape[0]
     h = x.shape[2] // self.config.patch_size
     w = x.shape[3] // self.config.patch_size
-    # Fake sequence: +1 for CLS token
-    fake_tokens = torch.randn(b, h*w + 1, self.config.hidden_size)
-    return self.encoder(fake_tokens)
-
-  @classmethod
-  def from_pretrained(cls):
-    config = FakeConfig()
-    return cls(config)
+    fake_tokens = torch.randn(b, h * w, self.config.hidden_size)
+    return FakeOutput(self.encoder(fake_tokens))
 
 
 class ArchitecturesTest(absltest.TestCase):
@@ -90,6 +88,50 @@ class ArchitecturesTest(absltest.TestCase):
 
     # 4 upsampling steps with scale factor 2: h*2*2*2*2 = h*16
     self.assertEqual(out.shape, (2, 2, 128, 128))
+
+  def test_vit_backbone_pyramid(self):
+    encoder = FakePretrainedVit(FakeConfig())
+    pyramid = architectures.ViTBackbonePyramid(
+        encoder=encoder,
+        image_size=64,
+        out_channels=256,
+    )
+    x = torch.randn(2, 3, 64, 64)
+    out = pyramid(x)
+
+    self.assertIn('0', out)
+    self.assertIn('1', out)
+    self.assertIn('2', out)
+    self.assertIn('3', out)
+    self.assertIn('4', out)
+
+    self.assertEqual(out['0'].shape, (2, 256, 16, 16))
+    self.assertEqual(out['1'].shape, (2, 256, 8, 8))
+    self.assertEqual(out['2'].shape, (2, 256, 4, 4))
+    self.assertEqual(out['3'].shape, (2, 256, 2, 2))
+    self.assertEqual(out['4'].shape, (2, 256, 1, 1))
+
+  def test_vit_backbone_pyramid_patch_size_8(self):
+    encoder = FakePretrainedVit(FakeConfig(patch_size=8))
+    pyramid = architectures.ViTBackbonePyramid(
+        encoder=encoder,
+        image_size=64,
+        out_channels=256,
+    )
+    x = torch.randn(2, 3, 64, 64)
+    out = pyramid(x)
+
+    self.assertIn('0', out)
+    self.assertIn('1', out)
+    self.assertIn('2', out)
+    self.assertIn('3', out)
+    self.assertIn('4', out)
+
+    self.assertEqual(out['0'].shape, (2, 256, 16, 16))
+    self.assertEqual(out['1'].shape, (2, 256, 8, 8))
+    self.assertEqual(out['2'].shape, (2, 256, 4, 4))
+    self.assertEqual(out['3'].shape, (2, 256, 2, 2))
+    self.assertEqual(out['4'].shape, (2, 256, 1, 1))
 
 
 if __name__ == '__main__':
