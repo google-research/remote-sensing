@@ -11,6 +11,7 @@ information about Earth AI and the different model families.
 
 ## 📘 Research Papers
 
+* FM-ChangeNet: Learning Change through Pathwise Feature Transport ([abstract](https://arxiv.org/abs/2607.04750), [pdf](https://arxiv.org/pdf/2607.04750))
 * RSRCC: A Remote Sensing Regional Change Comprehension Benchmark Constructed via Retrieval-Augmented Best-of-N Ranking ([abstract](https://arxiv.org/abs/2604.20623), [pdf](https://arxiv.org/pdf/2604.20623))
 * RS-OVC: Open-Vocabulary Counting for Remote-Sensing Data ([abstract](https://arxiv.org/abs/2604.08704), [pdf](https://arxiv.org/pdf/2604.08704))
 * A Recipe for Improving Remote Sensing VLM Zero Shot Generalization ([abstract](https://arxiv.org/abs/2503.08722), [pdf](https://arxiv.org/pdf/2503.08722))
