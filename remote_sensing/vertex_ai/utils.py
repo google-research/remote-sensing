@@ -31,6 +31,7 @@ class ModelConfig:
   model_id: str
   model_name: str
   model_path: str
+  model_type: str
 
 
 @dataclasses.dataclass
@@ -47,11 +48,25 @@ MODEL_CONFIGS = {
         model_id="earth-ai-imagery-owlvit-eap-10-2025",
         model_name="publishers/google/models/remote_sensing_owlvit",
         model_path="gs://vertex-model-garden-remote-sensing-access/models/OVD_OWL-ViT_So400M_RGB1008_V1",
+        model_type="OWLVIT",
     ),
     "MAMMUT": ModelConfig(
         model_id="earth-ai-imagery-mammut-eap-10-2025",
         model_name="publishers/google/models/remote_sensing_mammut",
         model_path="gs://vertex-model-garden-remote-sensing-access/models/MaMMUT_So400M_RGB224_V1",
+        model_type="MAMMUT",
+    ),
+    "SIGLIP2_224_RC1": ModelConfig(
+        model_id="earth-ai-imagery-siglip2-224-rc1-7-2026",
+        model_name="publishers/google/models/remote_sensing_siglip2_224_rc1",
+        model_path="gs://vertex-model-garden-remote-sensing-access/models/SigLIP2_So400M_Rgb224_RC1_1",
+        model_type="SIGLIP2",
+    ),
+    "SIGLIP2_512_RC1": ModelConfig(
+        model_id="earth-ai-imagery-siglip2-512-rc1-7-2026",
+        model_name="publishers/google/models/remote_sensing_siglip2_512_rc1",
+        model_path="gs://vertex-model-garden-remote-sensing-access/models/SigLIP2_So400M_Rgb512_RC1",
+        model_type="SIGLIP2_512",
     ),
 }
 
@@ -105,7 +120,7 @@ def create_model(
       "DEPLOY_SOURCE": "notebook",
       "MODEL_ID": model_config.model_id,
       "MODEL_PATH": model_config.model_path,
-      "MODEL_TYPE": model_type,
+      "MODEL_TYPE": model_config.model_type,
       "MODEL_MODE": model_mode,
       "PLATFORM": "CPU" if accelerator == "CPU" else "GPU",
   }
