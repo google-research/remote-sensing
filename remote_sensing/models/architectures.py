@@ -196,8 +196,8 @@ class ViTBackbonePyramid(nn.Module):
     self.encoder: nn.Module = encoder
 
     self.image_size: int = image_size
-    self.patch_size: int = self.encoder.config.patch_size
-    self.hidden_size: int = self.encoder.config.hidden_size
+    self.patch_size: int = self.encoder.config.patch_size  # pyrefly: ignore[bad-assignment]
+    self.hidden_size: int = self.encoder.config.hidden_size  # pyrefly: ignore[bad-assignment]
 
     if self.patch_size not in (8, 16, 32):
       raise ValueError(

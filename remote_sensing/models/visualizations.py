@@ -348,12 +348,12 @@ def visualize_dataset_predictions(
     num_images = k
   if num_images <= 0:
     raise ValueError("num_images must be a positive integer.")
-  if len(dataset) == 0:
+  if len(dataset) == 0:  # pyrefly: ignore[bad-argument-type]
     raise ValueError("dataset must contain at least one sample.")
 
-  sample_count = min(num_images, len(dataset))
+  sample_count = min(num_images, len(dataset))  # pyrefly: ignore[bad-argument-type]
   generator = random.Random(seed)
-  indices = generator.sample(range(len(dataset)), sample_count)
+  indices = generator.sample(range(len(dataset)), sample_count)  # pyrefly: ignore[bad-argument-type]
   model.eval()
 
   images = []

@@ -290,8 +290,8 @@ def process_split(
     if width_node is None or height_node is None:
       raise ValueError(f"Incomplete image size in: {xml_path}")
 
-    image_width = int(width_node.text)
-    image_height = int(height_node.text)
+    image_width = int(width_node.text)  # pyrefly: ignore[bad-argument-type]
+    image_height = int(height_node.text)  # pyrefly: ignore[bad-argument-type]
 
     if image_width <= 0 or image_height <= 0:
       raise ValueError(f"Invalid image dimensions in: {xml_path}")
