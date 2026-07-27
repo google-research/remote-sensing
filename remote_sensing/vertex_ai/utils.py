@@ -87,6 +87,11 @@ PLATFORM_CONFIGS = {
         accelerator_type="NVIDIA_A100_80GB",
         accelerator_count=1,
     ),
+    "NVIDIA_TESLA_A100": PlatformConfig(
+        machine_type="a2-highgpu-1g",
+        accelerator_type="NVIDIA_TESLA_A100",
+        accelerator_count=1,
+    ),
 }
 
 
