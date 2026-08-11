@@ -219,6 +219,45 @@ class AugmentationsTest(parameterized.TestCase):
     self.assertEqual(outputs["label"].shape, (10, 17, 50, 50))
     self.assertEqual(outputs["weight"].shape, (10, 1, 50, 50))
 
+  def test_detection_random_flip_hflip(self):
+    transform = augmentations.DetectionRandomFlipRotate(hflip_prob=1.0)
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    image[:, :50, :] = 255  # Left half white, right half black
+    boxes = torch.tensor([[10.0, 20.0, 40.0, 60.0]])
+    aug_img, aug_boxes = transform(image, boxes, image_size=100)
+
+    # Image left half should now be black, right half white
+    self.assertEqual(aug_img[50, 25, 0], 0)
+    self.assertEqual(aug_img[50, 75, 0], 255)
+    # Box x-coords inverted: [10, 20, 40, 60] -> [60, 20, 90, 60]
+    np.testing.assert_allclose(aug_boxes.numpy(), [[60.0, 20.0, 90.0, 60.0]])
+
+  def test_detection_random_flip_vflip(self):
+    transform = augmentations.DetectionRandomFlipRotate(
+        hflip_prob=0.0, vflip_prob=1.0
+    )
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    image[:50, :, :] = 255  # Top half white, bottom half black
+    boxes = torch.tensor([[10.0, 20.0, 40.0, 60.0]])
+    aug_img, aug_boxes = transform(image, boxes, image_size=100)
+
+    # Image top half should now be black, bottom half white
+    self.assertEqual(aug_img[25, 50, 0], 0)
+    self.assertEqual(aug_img[75, 50, 0], 255)
+    # Box y-coords inverted: [10, 20, 40, 60] -> [10, 40, 40, 80]
+    np.testing.assert_allclose(aug_boxes.numpy(), [[10.0, 40.0, 40.0, 80.0]])
+
+  def test_detection_random_flip_transpose(self):
+    transform = augmentations.DetectionRandomFlipRotate(
+        hflip_prob=0.0, tflip_prob=1.0
+    )
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    boxes = torch.tensor([[10.0, 20.0, 40.0, 60.0]])
+    _, aug_boxes = transform(image, boxes, image_size=100)
+
+    # Box coords transposed: [10, 20, 40, 60] -> [20, 10, 60, 40]
+    np.testing.assert_allclose(aug_boxes.numpy(), [[20.0, 10.0, 60.0, 40.0]])
+
 
 if __name__ == "__main__":
   absltest.main()

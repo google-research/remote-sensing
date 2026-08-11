@@ -20,12 +20,13 @@ by Torchvision detection models.
 """
 
 import pathlib
-import random
 from typing import Any
 
 import cv2
+from remote_sensing.models import augmentations
 import torch
 from torch.utils import data
+
 
 Dataset = data.Dataset
 Path = pathlib.Path
@@ -87,6 +88,10 @@ class DIORYOLODataset(Dataset):
       image_size: int,
       train: bool = False,
       hflip_prob: float = 0.5,
+      vflip_prob: float = 0.0,
+      tflip_prob: float = 0.0,
+      random_rotate: bool = False,
+      color_jitter: bool = False,
       expected_images: int | None = None,
   ) -> None:
     """Initializes the DIOR dataset adapter.
@@ -100,6 +105,12 @@ class DIORYOLODataset(Dataset):
           flipping).
         hflip_prob: Probability of flipping the image horizontally during
           training.
+        vflip_prob: Probability of flipping the image vertically during
+          training.
+        tflip_prob: Probability of transpose flipping (swapping X and Y) during
+          training.
+        random_rotate: Whether to apply random 90-degree rotations.
+        color_jitter: Whether to apply brightness/contrast color jitter.
         expected_images: Optional expected count of images for validation.
 
     Raises:
@@ -112,6 +123,10 @@ class DIORYOLODataset(Dataset):
     self.image_size = image_size
     self.train = train
     self.hflip_prob = hflip_prob
+    self.vflip_prob = vflip_prob
+    self.tflip_prob = tflip_prob
+    self.random_rotate = random_rotate
+    self.color_jitter = color_jitter
 
     if not self.img_dir.exists():
       raise FileNotFoundError(f"Image directory does not exist: {self.img_dir}")
@@ -135,6 +150,26 @@ class DIORYOLODataset(Dataset):
 
   def __len__(self) -> int:
     return len(self.images)
+
+  def _apply_augmentations(
+      self,
+      image: Any,
+      boxes_tensor: torch.Tensor,
+  ) -> tuple[Any, torch.Tensor]:
+    """Applies geometric and color augmentations to image and bounding boxes."""
+    flipper = augmentations.DetectionRandomFlipRotate(
+        hflip_prob=self.hflip_prob,
+        vflip_prob=self.vflip_prob,
+        tflip_prob=self.tflip_prob,
+        random_rotate=self.random_rotate,
+    )
+    image, boxes_tensor = flipper(image, boxes_tensor, self.image_size)
+
+    if self.color_jitter:
+      jitter = augmentations.RandomColorJitter()
+      image = jitter(image)
+
+    return image, boxes_tensor
 
   def __getitem__(
       self,
@@ -242,17 +277,9 @@ class DIORYOLODataset(Dataset):
         dtype=torch.int64,
     )
 
-    # Apply horizontal flipping during training and transform boxes
-    # consistently with the image.
-    if self.train and random.random() < self.hflip_prob:
-      image = image[:, ::-1, :].copy()
-
-      if len(boxes_tensor) > 0:
-        old_x1 = boxes_tensor[:, 0].clone()
-        old_x2 = boxes_tensor[:, 2].clone()
-
-        boxes_tensor[:, 0] = self.image_size - old_x2
-        boxes_tensor[:, 2] = self.image_size - old_x1
+    # Apply training augmentations
+    if self.train:
+      image, boxes_tensor = self._apply_augmentations(image, boxes_tensor)
 
     # Convert HWC uint8 image into a CHW float tensor in [0, 1].
     image_tensor = (

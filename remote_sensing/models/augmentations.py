@@ -89,7 +89,9 @@ loss function, and that the loss function is compatible with soft-labels.
 The `losses.py` library is designed to work with these augmentations.
 """
 
+import random
 from typing import Any
+import cv2
 import torch
 from torch import nn
 import torchvision
@@ -364,3 +366,134 @@ class ValidationCheck(nn.Module):
         f" {weight.max().item()})",
     )
     return x
+
+
+class RandomColorJitter(nn.Module):
+  """Applies standard torchvision ColorJitter (brightness, contrast, saturation, hue) to an RGB image."""
+
+  def __init__(
+      self,
+      brightness: float = 0.2,
+      contrast: float = 0.2,
+      saturation: float = 0.2,
+      hue: float = 0.1,
+  ) -> None:
+    """Initializes RandomColorJitter.
+
+    Args:
+        brightness: How much to jitter brightness (non-negative float).
+        contrast: How much to jitter contrast (non-negative float).
+        saturation: How much to jitter saturation (non-negative float).
+        hue: How much to jitter hue (float between 0 and 0.5).
+    """
+    super().__init__()
+    self.jitter = torchvision_v2.ColorJitter(
+        brightness=brightness,
+        contrast=contrast,
+        saturation=saturation,
+        hue=hue,
+    )
+
+  def forward(self, image: Any) -> Any:
+    """Applies torchvision ColorJitter to an image uint8 numpy array."""
+    # Convert HWC uint8 numpy array to CHW uint8 tensor
+    img_tensor = torch.from_numpy(image).permute(2, 0, 1)
+    jittered_tensor = self.jitter(img_tensor)
+    return jittered_tensor.permute(1, 2, 0).numpy()
+
+
+class DetectionRandomFlipRotate(nn.Module):
+  """Applies D4 dihedral group augmentations (hflip, vflip, transpose flip, rotate) to image and boxes."""
+
+  def __init__(
+      self,
+      hflip_prob: float = 0.5,
+      vflip_prob: float = 0.0,
+      tflip_prob: float = 0.0,
+      random_rotate: bool = False,
+  ) -> None:
+    """Initializes DetectionRandomFlipRotate.
+
+    Args:
+        hflip_prob: Probability of horizontal image flipping.
+        vflip_prob: Probability of vertical image flipping.
+        tflip_prob: Probability of transpose flipping (swapping X and Y axes).
+        random_rotate: Whether to apply random 90-degree rotations.
+    """
+    super().__init__()
+    self.hflip_prob = hflip_prob
+    self.vflip_prob = vflip_prob
+    self.tflip_prob = tflip_prob
+    self.random_rotate = random_rotate
+
+  def forward(
+      self,
+      image: Any,
+      boxes_tensor: torch.Tensor,
+      image_size: int,
+  ) -> tuple[Any, torch.Tensor]:
+    """Applies geometric flips, transpose, and rotations to image and bounding boxes.
+
+    Args:
+        image: Input image NumPy uint8 array of shape (H, W, C).
+        boxes_tensor: Bounding boxes tensor of shape (N, 4) in [x1, y1, x2, y2]
+          pixel coordinate format.
+        image_size: Spatial dimension (width and height) of the image.
+
+    Returns:
+        Tuple of (augmented_image, augmented_boxes_tensor).
+    """
+    # Vertical flipping
+    if self.vflip_prob > 0.0 and random.random() < self.vflip_prob:
+      image = image[::-1, :, :].copy()
+      if len(boxes_tensor) > 0:
+        old_y1 = boxes_tensor[:, 1].clone()
+        old_y2 = boxes_tensor[:, 3].clone()
+        boxes_tensor[:, 1] = image_size - old_y2
+        boxes_tensor[:, 3] = image_size - old_y1
+
+    # Horizontal flipping
+    if self.hflip_prob > 0.0 and random.random() < self.hflip_prob:
+      image = image[:, ::-1, :].copy()
+      if len(boxes_tensor) > 0:
+        old_x1 = boxes_tensor[:, 0].clone()
+        old_x2 = boxes_tensor[:, 2].clone()
+        boxes_tensor[:, 0] = image_size - old_x2
+        boxes_tensor[:, 2] = image_size - old_x1
+
+    # Transpose flipping (swapping X and Y coordinates)
+    if self.tflip_prob > 0.0 and random.random() < self.tflip_prob:
+      image = image.transpose(1, 0, 2).copy()
+      if len(boxes_tensor) > 0:
+        boxes_tensor = boxes_tensor[:, [1, 0, 3, 2]]
+
+    # Random 90-degree rotations
+    if self.random_rotate:
+      k = random.randint(0, 3)
+      if k > 0:
+        image = cv2.rotate(
+            image,
+            [
+                cv2.ROTATE_90_CLOCKWISE,
+                cv2.ROTATE_180,
+                cv2.ROTATE_90_COUNTERCLOCKWISE,
+            ][k - 1],
+        )
+
+        if len(boxes_tensor) > 0:
+          for _ in range(k):
+            x1_old = boxes_tensor[:, 0].clone()
+            y1_old = boxes_tensor[:, 1].clone()
+            x2_old = boxes_tensor[:, 2].clone()
+            y2_old = boxes_tensor[:, 3].clone()
+
+            boxes_tensor[:, 0] = image_size - y2_old
+            boxes_tensor[:, 1] = x1_old
+            boxes_tensor[:, 2] = image_size - y1_old
+            boxes_tensor[:, 3] = x2_old
+
+    return image, boxes_tensor
+
+
+# Backward-compatibility alias
+DetectionRandomFlip = DetectionRandomFlipRotate

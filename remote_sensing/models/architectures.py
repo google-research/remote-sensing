@@ -168,6 +168,173 @@ class ViTUNetDecoder(nn.Module):
     return self.pred_head(x)
 
 
+class LayerNorm2d(nn.Module):
+  """LayerNorm applied over the channel dimension of a 2D image tensor."""
+
+  def __init__(self, num_channels: int, eps: float = 1e-6) -> None:
+    """Initializes LayerNorm2d.
+
+    Args:
+        num_channels: Number of channels in the 2D input tensor.
+        eps: Small epsilon value for numerical stability.
+    """
+    super().__init__()
+    self.weight: nn.Parameter = nn.Parameter(torch.ones(num_channels))
+    self.bias: nn.Parameter = nn.Parameter(torch.zeros(num_channels))
+    self.eps: float = eps
+
+  def forward(self, x: torch.Tensor) -> torch.Tensor:
+    """Applies 2D layer normalization along the channel dimension.
+
+    Args:
+        x: Input 4D feature map tensor of shape (B, C, H, W), where B is batch
+          size, C is the channel dimension (dim=1), H is height, and W is width.
+
+    Returns:
+        Normalized feature map tensor of shape (B, C, H, W).
+    """
+    mean = x.mean(dim=1, keepdim=True)
+    var = (x - mean).pow(2).mean(dim=1, keepdim=True)
+    x_norm = (x - mean) / torch.sqrt(var + self.eps)
+    return x_norm * self.weight.view(1, -1, 1, 1) + self.bias.view(1, -1, 1, 1)
+
+
+class ConvLayerNormRPNHead(nn.Module):
+  """Region Proposal Network (RPN) head with Conv2d layers and LayerNorm2d.
+
+  This head processes multi-scale feature maps using N 3x3 convolutions with
+  channel-wise LayerNorm2d and ReLU activations, followed by 1x1 convolutions
+  for objectness classification logits and bounding-box regression offsets.
+  """
+
+  def __init__(
+      self,
+      in_channels: int = 256,
+      num_anchors: int = 3,
+      feat_channels: int = 256,
+      num_convs: int = 2,
+  ) -> None:
+    """Initializes ConvLayerNormRPNHead.
+
+    Args:
+        in_channels: Number of input feature map channels (default: 256).
+        num_anchors: Number of anchor boxes generated per spatial location.
+        feat_channels: Number of intermediate convolutional channels (default:
+          256).
+        num_convs: Number of convolutional layers in the head (default: 2).
+    """
+    super().__init__()
+    self.convs: nn.ModuleList = nn.ModuleList()
+    curr_channels = in_channels
+    for _ in range(num_convs):
+      self.convs.append(
+          nn.Sequential(
+              nn.Conv2d(
+                  curr_channels, feat_channels, kernel_size=3, padding=1
+              ),
+              LayerNorm2d(feat_channels),
+              nn.ReLU(inplace=True),
+          )
+      )
+      curr_channels = feat_channels
+
+    self.cls_logits: nn.Conv2d = nn.Conv2d(
+        feat_channels, num_anchors, kernel_size=1
+    )
+    self.bbox_pred: nn.Conv2d = nn.Conv2d(
+        feat_channels, num_anchors * 4, kernel_size=1
+    )
+
+  def forward(
+      self, x: list[torch.Tensor]
+  ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+    logits = []
+    bbox_reg = []
+    for feature in x:
+      h = feature
+      for conv in self.convs:
+        h = conv(h)
+      logits.append(self.cls_logits(h))
+      bbox_reg.append(self.bbox_pred(h))
+    return logits, bbox_reg
+
+
+class FastRCNNConvLayerNormBoxHead(nn.Module):
+  """Fast R-CNN box head with Conv2d layers, LayerNorm2d, and 1 Linear layer.
+
+  This head processes RoI-pooled feature maps using N 3x3 convolutions with
+  channel-wise LayerNorm2d and ReLU activations, followed by a flattened linear
+  projection layer for final classification and box regression.
+  """
+
+  def __init__(
+      self,
+      in_channels: int = 256,
+      feat_channels: int = 256,
+      num_convs: int = 4,
+      roi_output_size: int = 7,
+      fc_dims: int = 1024,
+  ) -> None:
+    """Initializes FastRCNNConvLayerNormBoxHead.
+
+    Args:
+        in_channels: Number of input channels from RoI pooling (default: 256).
+        feat_channels: Number of intermediate convolutional channels (default:
+          256).
+        num_convs: Number of convolutional layers in the head (default: 4).
+        roi_output_size: Spatial output size (height and width) from RoI pooling
+          (default: 7, following Fast/Faster R-CNN standards:
+          https://www.cv-foundation.org/openaccess/content_iccv_2015/papers/Girshick_Fast_R-CNN_ICCV_2015_paper.pdf
+          and
+          https://github.com/rbgirshick/py-faster-rcnn/blob/master/models/pascal_voc/VGG16/faster_rcnn_end2end/train.prototxt
+          ).
+        fc_dims: Dimensionality of the output fully-connected representation
+          (default: 1024).
+    """
+    super().__init__()
+    self.convs: nn.ModuleList = nn.ModuleList()
+    curr_channels = in_channels
+    for _ in range(num_convs):
+      self.convs.append(
+          nn.Sequential(
+              nn.Conv2d(
+                  curr_channels,
+                  feat_channels,
+                  kernel_size=3,
+                  padding=1,
+                  bias=False,
+              ),
+              LayerNorm2d(feat_channels),
+              nn.ReLU(inplace=True),
+          )
+      )
+      curr_channels = feat_channels
+
+    # Flatten spatial feature map
+    # (feat_channels x roi_output_size x roi_output_size).
+    # Default 7x7 spatial resolution follows Fast/Faster R-CNN standards:
+    # - Paper:
+    # https://www.cv-foundation.org/openaccess/content_iccv_2015/papers/Girshick_Fast_R-CNN_ICCV_2015_paper.pdf
+    # - Code:
+    # https://github.com/rbgirshick/py-faster-rcnn/blob/master/models/pascal_voc/VGG16/faster_rcnn_end2end/train.prototxt
+    in_features = feat_channels * roi_output_size * roi_output_size
+    self.fc: nn.Sequential = nn.Sequential(
+        nn.Flatten(start_dim=1),
+        nn.Linear(in_features, fc_dims),
+        nn.ReLU(inplace=True),
+    )
+
+  def forward(self, x: torch.Tensor) -> torch.Tensor:
+    h = x
+    for conv in self.convs:
+      h = conv(h)
+    return self.fc(h)
+
+
+# Backward-compatibility alias
+ConvLayerNormBoxHead = FastRCNNConvLayerNormBoxHead
+
+
 class ViTBackbonePyramid(nn.Module):
   """A Vision Transformer (ViT) backbone with a single-feature spatial pyramid.
 
