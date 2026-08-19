@@ -30,6 +30,7 @@ dependencies = [
     "numpy",
     "opencv-python",
     "overrides",
+    "pandas",
     "scikit-learn",
     "scipy",
     "torch",
