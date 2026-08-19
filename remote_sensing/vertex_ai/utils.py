@@ -102,6 +102,7 @@ def create_model(
     accelerator: str,
     docker_uri: str = SERVE_DOCKER_URI,
     batch_model: bool = False,
+    **kwargs,
 ) -> aiplatform.Model:
   """Creates a Remote Sensing model from Model Garden.
 
@@ -112,6 +113,7 @@ def create_model(
     accelerator: The accelerator to use for the model.
     docker_uri: The docker URI to use for the model.
     batch_model: Whether the model is a batch model.
+    **kwargs: Additional keyword arguments to pass to the model upload method.
 
   Returns:
     The model.
@@ -141,6 +143,7 @@ def create_model(
       model_garden_source_model_name=None
       if batch_model
       else model_config.model_name,
+      **kwargs,
   )
   return model
 
@@ -153,6 +156,7 @@ def deploy_model(
     min_replica_count: int,
     max_replica_count: int,
     use_dedicated_endpoint: bool = True,
+    **kwargs,
 ) -> aiplatform.Endpoint:
   """Deploys a model to an endpoint."""
 
@@ -179,6 +183,7 @@ def deploy_model(
       system_labels={
           "NOTEBOOK_NAME": "model_garden_remote_sensing_deployment.ipynb"
       },
+      **kwargs,
   )
   return endpoint
 
