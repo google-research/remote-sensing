@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""remote_sensing API."""
+"""Earth AI Remote Sensing API."""
 
 # A new PyPI release will be pushed every time `__version__` is increased.
 # When changing this, also update the CHANGELOG.md.
-__version__ = '0.1.0'
+__version__ = '0.1.1'
