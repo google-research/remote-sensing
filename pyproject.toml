@@ -25,7 +25,7 @@ keywords = []
 # pip dependencies of the project
 # Installed locally with `pip install -e .`
 dependencies = [
-    "etils",
+    "etils[epath]~=1.14.0",
     "ml-collections",
     "numpy",
     "opencv-python",
