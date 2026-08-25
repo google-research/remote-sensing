@@ -33,6 +33,7 @@ dependencies = [
     "pandas",
     "scikit-learn",
     "scipy",
+    "matplotlib",
     "torch",
     "torchvision",
     "transformers~=5.5.0",
