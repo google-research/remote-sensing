@@ -10,7 +10,7 @@ build-backend = "flit_core.buildapi"
 name = "earth-ai-remote-sensing-models"
 description = "Earth AI Remote Sensing Models"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = {file = "LICENSE"}
 authors = [{name = "Earth AI Remote Sensing Models authors", email="earth-ai-remote-sensing-external@google.com"}]
 classifiers = [  # List of https://pypi.org/classifiers/
