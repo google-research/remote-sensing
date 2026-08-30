@@ -100,14 +100,14 @@ class VisualizationsTest(parameterized.TestCase):
   def test_visualize_segmentation(self, use_weights: bool, golden_file: str):
     resource = epath.resource_path("remote_sensing")
 
-    image_file = resource / "(tests/testdata/test_image)"
+    image_file = resource / "(tests/testdata/test_image.png)"
     image = cv2.imread(image_file, cv2.IMREAD_COLOR)  # uint8[H, W, BGR]
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) / 255.0  # float32[H, W, RGB]
     image = torch.from_numpy(image).permute(2, 0, 1)  # float32[RGB, H, W]
     image = image[None, :, :, :]  # float32[B, RGB, H, W]
 
     # int64[B, H, W]
-    label_file = resource / "(tests/testdata/test_segmentation_label)"
+    label_file = resource / "(tests/testdata/test_segmentation_label.png)"
     label = cv2.imread(label_file, cv2.IMREAD_GRAYSCALE)  # uint8[H, W]
     label = torch.from_numpy(label).to(torch.long)  # int64[H, W]
     # int64[C, H, W]
@@ -115,7 +115,7 @@ class VisualizationsTest(parameterized.TestCase):
     label = label[None, :, :, :].to(torch.float32)  # float32[C, H, W]
 
     # int64[B, H, W]
-    pred_file = resource / "(tests/testdata/test_segmentation_prediction)"
+    pred_file = resource / "(tests/testdata/test_segmentation_prediction.png)"
     pred = cv2.imread(pred_file, cv2.IMREAD_GRAYSCALE)  # uint8[H, W]
     pred = torch.from_numpy(pred).to(torch.long)  # int64[H, W]
     # int64[C, H, W]
@@ -124,7 +124,7 @@ class VisualizationsTest(parameterized.TestCase):
 
     # float32[B, 1, H, W]
     if use_weights:
-      weight_file = resource / "(tests/testdata/test_segmentation_weight)"
+      weight_file = resource / "(tests/testdata/test_segmentation_weight.png)"
       weight = cv2.imread(weight_file, cv2.IMREAD_GRAYSCALE)  # uint8[H, W]
       weight = torch.from_numpy(weight).to(torch.float32)  # float32[H, W]
       weight = weight[None, None, :, :]  # float32[B, 1, H, W]
@@ -200,7 +200,7 @@ class VisualizationsTest(parameterized.TestCase):
     visualizations.plt.close(fig)
 
     golden_file = (
-        resource / "(tests/testdata/test_object_detection_golden)"
+        resource / "(tests/testdata/test_object_detection_golden.png)"
     )
     golden = cv2.imread(golden_file, cv2.IMREAD_COLOR)  # uint8[H', W', BGR]
     golden = cv2.cvtColor(golden, cv2.COLOR_BGR2RGB)  # uint8[H', W', RGB]
