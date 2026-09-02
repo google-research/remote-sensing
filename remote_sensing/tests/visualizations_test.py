@@ -148,7 +148,7 @@ class VisualizationsTest(parameterized.TestCase):
     # uint8[H', W', RGB]
     out = (out.permute(1, 2, 0) * 255).to(torch.uint8).numpy()
 
-    golden_file = resource / "models/testdata" / golden_file
+    golden_file = resource / "tests/testdata" / golden_file
     golden = cv2.imread(golden_file, cv2.IMREAD_COLOR)  # uint8[H', W', BGR]
     golden = cv2.cvtColor(golden, cv2.COLOR_BGR2RGB)  # uint8[H', W', RGB]
 

@@ -19,6 +19,7 @@ import dataclasses
 import io
 
 from google.cloud import aiplatform
+
 from PIL import Image
 
 SERVE_DOCKER_URI = "us-docker.pkg.dev/vertex-ai-restricted/vertex-vision-model-garden-remote-sensing-dockers/remote-sensing-serve-tf-gpu:latest"
