@@ -58,7 +58,7 @@ class MetricsTest(absltest.TestCase):
     test_metric("train_class_road_dice", 0)
     test_metric("train_class_water_dice", 0)
     test_metric("train_loss_dice", 1 - e / 3 / (e + 1))
-    test_metric("train_loss_xent", 2 * np.log(e + 2) - 2)
+    test_metric("train_loss_xent", np.log(e + 2) - 1)
     test_metric("train_mean_dice", e / 3 / (e + 1))
     test_metric("train_mean_jaccard", e / 3 / (e + 2))
     test_metric("train_mean_iou", 1)
@@ -74,6 +74,7 @@ class MetricsTest(absltest.TestCase):
     test_metric("val_class_road_recall", 0.0)
     test_metric("val_class_water_recall", np.nan)
     test_metric("val_mean_accuracy", 1 / 3.0)
+    test_metric("val_loss_xent", np.log(e + 2) - 1 / 3.0)
 
   def test_multiple_epochs(self):
     class_names = {0: "bg", 1: "road", 2: "water"}
