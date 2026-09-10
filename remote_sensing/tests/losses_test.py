@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from absl.testing import absltest
+from absl.testing import parameterized
 from remote_sensing.models import losses
 import torch
 
@@ -191,6 +192,66 @@ class LossesTest(absltest.TestCase):
     for i in range(51):
       self.assertAlmostEqual(combined_loss(x, x).item(), 100 + i * 2, places=3)
       combined_loss.step()
+
+
+class CrossEntropyWeightingTest(parameterized.TestCase):
+
+  @parameterized.product(
+      batch_shape=[(), (1,), (2,), (2, 3)],
+      weighted=[False, True],
+      soft_targets=[False, True],
+  )
+  def test_matches_pixelwise_reference(
+      self, batch_shape, weighted, soft_targets
+  ):
+    generator = torch.Generator().manual_seed(7)
+    shape = (*batch_shape, 3, 2, 4)
+    logits = torch.randn(shape, generator=generator, requires_grad=True)
+    labels = torch.randint(3, (*batch_shape, 2, 4), generator=generator)
+    targets = torch.nn.functional.one_hot(labels, 3).movedim(-1, -3).float()
+    if soft_targets:
+      targets = targets * 0.8 + 0.2 / 3
+    weight = None
+    if weighted:
+      weight = torch.rand((*batch_shape, 1, 2, 4), generator=generator)
+      weight[..., 0, 0] = 0
+    loss_fn = losses.SegmentationCrossEntropyLoss()
+    actual = loss_fn(logits, targets, weight)
+    pixel_loss = -(targets * logits.log_softmax(dim=-3)).sum(dim=-3)
+    if weight is None:
+      expected = pixel_loss.mean()
+    else:
+      expected = (pixel_loss * weight.squeeze(-3)).sum() / (
+          weight.sum() + loss_fn.epsilon
+      )
+    torch.testing.assert_close(actual, expected)
+    (actual_grad,) = torch.autograd.grad(actual, logits, retain_graph=True)
+    (expected_grad,) = torch.autograd.grad(expected, logits)
+    torch.testing.assert_close(actual_grad, expected_grad)
+
+  def test_masked_image_has_zero_gradient(self):
+    logits = torch.tensor(
+        [[[[0.0]], [[0.0]]], [[[0.0]], [[4.0]]]], requires_grad=True
+    )
+    targets = torch.tensor([[[[1.0]], [[0.0]]], [[[1.0]], [[0.0]]]])
+    weight = torch.tensor([[[[1.0]]], [[[0.0]]]])
+    loss_fn = losses.SegmentationCrossEntropyLoss()
+    loss = loss_fn(logits, targets, weight)
+    torch.testing.assert_close(
+        loss, torch.log(torch.tensor(2.0)) / (1 + loss_fn.epsilon)
+    )
+    loss.backward()
+    torch.testing.assert_close(logits.grad[1], torch.zeros_like(logits.grad[1]))
+
+  @parameterized.parameters((), (2,), (2, 3))
+  def test_all_zero_weights(self, *batch_shape):
+    logits = torch.ones((*batch_shape, 3, 2, 4), requires_grad=True)
+    targets = torch.full_like(logits, 1.0 / 3)
+    weight = torch.zeros((*batch_shape, 1, 2, 4))
+    loss = losses.SegmentationCrossEntropyLoss()(logits, targets, weight)
+    self.assertEqual(loss.item(), 0.0)
+    loss.backward()
+    torch.testing.assert_close(logits.grad, torch.zeros_like(logits))
 
 
 if __name__ == '__main__':

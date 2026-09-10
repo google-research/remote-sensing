@@ -448,9 +448,14 @@ class SegmentationCrossEntropyLoss(nn.Module):
       weight: torch.Tensor | None = None,
   ) -> torch.Tensor:
     _validate_shapes(logits, targets, weight)
-    per_pixel_xent = self.xent(logits, targets)
+    # CrossEntropyLoss expects one batch axis followed by the class axis.
+    per_pixel_xent = self.xent(
+        logits.reshape(-1, *logits.shape[-3:]),
+        targets.reshape(-1, *targets.shape[-3:]),
+    )
     if weight is None:
       return per_pixel_xent.mean()
+    weight = weight.reshape_as(per_pixel_xent)
     return (per_pixel_xent * weight).sum() / (weight.sum() + self.epsilon)
 
 
