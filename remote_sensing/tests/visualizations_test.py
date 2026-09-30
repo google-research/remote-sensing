@@ -205,17 +205,19 @@ class VisualizationsTest(parameterized.TestCase):
     golden = cv2.imread(golden_file, cv2.IMREAD_COLOR)  # uint8[H', W', BGR]
     golden = cv2.cvtColor(golden, cv2.COLOR_BGR2RGB)  # uint8[H', W', RGB]
 
-    if not np.array_equal(out, golden):
-      diff = (
-          np.max(np.abs(out.astype(int) - golden.astype(int)))
-          if out.shape == golden.shape
-          else -1
-      )
+    if out.shape != golden.shape:
+      num_diff_pixels = float("inf")
+    else:
+      num_diff_pixels = np.sum(out != golden)
+    if num_diff_pixels > golden.size * 5 / 100:
+      # We allow a 5% difference in the number of pixels, because of version
+      # differences in the matplotlib library.
       with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as outfile:
         cv2.imwrite(outfile.name, cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
         self.fail(
             f"Output stored in {outfile.name} does not match golden."
-            f" diff={diff} out={out.shape} golden={golden.shape}"
+            f" num_diff_pixels={num_diff_pixels} out={out.shape} "
+            f"golden={golden.shape}"
         )
 
   def test_visualize_dataset_predictions_with_auto_label_palette(self):
