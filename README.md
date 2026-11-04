@@ -13,7 +13,9 @@ information about Earth AI and the different model families.
 
 * FM-ChangeNet: Learning Change through Pathwise Feature Transport ([abstract](https://arxiv.org/abs/2607.04750), [pdf](https://arxiv.org/pdf/2607.04750))
 * RSRCC: A Remote Sensing Regional Change Comprehension Benchmark Constructed via Retrieval-Augmented Best-of-N Ranking ([abstract](https://arxiv.org/abs/2604.20623), [pdf](https://arxiv.org/pdf/2604.20623))
-* RS-OVC: Open-Vocabulary Counting for Remote-Sensing Data ([abstract](https://arxiv.org/abs/2604.08704), [pdf](https://arxiv.org/pdf/2604.08704))
+* GroundSet: A Cadastral-Grounded Dataset for Spatial Understanding with Vector Data (joint work with Roger Ferrod and Sylvain Lobry from Université Paris Cité), ECCV 2026 ([abstract](https://arxiv.org/abs/2603.14609), [pdf](https://arxiv.org/pdf/2603.14609))
+* RS-OVC: Open-Vocabulary Counting for Remote-Sensing Data - [pdf](https://link.springer.com/content/pdf/10.1007/978-3-032-31663-9_38), [ICPR 2026 slides](https://icpr2026orgteam.github.io/OralPres/446.pdf), [code](https://github.com/tamirshor7/RS-OVC). ArXiv version: ([abstract](https://arxiv.org/abs/2604.08704), [pdf](https://arxiv.org/pdf/2604.08704))
+* Type-Aware Ranking of Urban Similarity from Aerial Imagery ([abstract](https://research.google/pubs/type-aware-ranking-of-urban-similarity-from-aerial-imagery/), [pdf](https://openaccess.thecvf.com/content/WACV2026W/GeoCV/papers/Kligvasser_Type-Aware_Ranking_of_Urban_Similarity_from_Aerial_Imagery_WACVW_2026_paper.pdf))
 * A Recipe for Improving Remote Sensing VLM Zero Shot Generalization ([abstract](https://arxiv.org/abs/2503.08722), [pdf](https://arxiv.org/pdf/2503.08722))
 * On-the-Fly OVD Adaptation with FLAME: Few-shot Localization via Active Marginal-Samples Exploration ([abstract](https://openaccess.thecvf.com/content/WACV2026W/GeoCV/html/Refael_On-the-Fly_OVD_Adaptation_with_FLAME_Few-shot_Localization_via_Active_Marginal-Samples_WACVW_2026_paper.html), [pdf](https://openaccess.thecvf.com/content/WACV2026W/GeoCV/papers/Refael_On-the-Fly_OVD_Adaptation_with_FLAME_Few-shot_Localization_via_Active_Marginal-Samples_WACVW_2026_paper.pdf))
 * Zero-Shot Multi-Spectral Learning: Reimagining a Generalist Multimodal Gemini 2.5 Model for Remote Sensing Applications ([abstract](https://arxiv.org/abs/2509.19087), [pdf](https://arxiv.org/pdf/2509.19087), [blog](https://developers.googleblog.com/unlocking-multi-spectral-data-with-gemini/), [colab](https://github.com/google-gemini/cookbook/blob/main/examples/multi_spectral_remote_sensing.ipynb))
@@ -24,6 +26,9 @@ information about Earth AI and the different model families.
 * [RSRCC](https://huggingface.co/datasets/google/RSRCC) - The dataset is designed
   for semantic change understanding in remote sensing, pairing multi-temporal
   image evidence with natural language questions and answers.
+* [GroundSet](https://huggingface.co/datasets/RogerFerrod/GroundSet) - This dataset
+  by Roger Ferrod and Sylvain Lobry from Université Paris Cité can be used to
+  train and evaluate VLMs on a variety of Remote Sensing tasks.
 
 ## 💻 Code repository
 
