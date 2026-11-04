@@ -23,9 +23,14 @@ To release a new version (e.g. from `1.0.0` -> `2.0.0`):
 
 ## [Unreleased]
 
-## [0.1.0] - 2022-01-01
+## [0.1.1] - 2026-11-01
 
 * Initial release
 
-[Unreleased]: https://github.com/google-research/remote_sensing/compare/v0.1.0...HEAD
+## [0.1.0] - 2026-01-01
+
+* Update
+
+[Unreleased]: https://github.com/google-research/remote_sensing/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/google-research/remote_sensing/releases/tag/v0.1.1
 [0.1.0]: https://github.com/google-research/remote_sensing/releases/tag/v0.1.0
